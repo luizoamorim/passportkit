@@ -15,32 +15,61 @@ import {
   pad,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { foundry } from 'viem/chains';
+import { foundry, sepolia } from 'viem/chains';
 
 import { decodeNotCompliant } from './lib/decode.js';
+import { parseEnvFile } from './lib/env.js';
+import {
+  MODIFY_LIQUIDITY_TOPIC,
+  SWAP_TOPIC,
+  MODIFY_LIQUIDITY_EVENT,
+  SWAP_EVENT,
+  aggregateLiquidity,
+  lastPrices,
+  poolIdOf,
+} from './lib/positions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONTRACTS_DIR = path.resolve(__dirname, '../../contracts');
-const RPC_URL = process.env.RPC_URL ?? 'http://127.0.0.1:8545';
-const PORT = Number(process.env.PORT ?? 4180);
-const ADDRESSES_FILE = path.join(__dirname, 'addresses.json');
 
-// anvil dev keys — local demo only
+// ---------------------------------------------------------------- config
+
+const ENV = {
+  ...(existsSync(path.join(__dirname, '.env')) ? parseEnvFile(readFileSync(path.join(__dirname, '.env'), 'utf8')) : {}),
+  ...process.env,
+};
+const RPC_URL = ENV.RPC_URL ?? 'http://127.0.0.1:8545';
+const PORT = Number(ENV.PORT ?? 4180);
+const EXPLORER_URL = (ENV.EXPLORER_URL ?? '').replace(/\/$/, '') || null;
+const ADDRESSES_FILE = path.join(__dirname, ENV.ADDRESSES_FILE ?? 'addresses.json');
+
+// anvil dev keys as defaults — override in .env for testnets
 const KEYS = {
-  operator: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-  ana: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
-  rui: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
+  operator: ENV.OPERATOR_PK ?? '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+  ana: ENV.ANA_PK ?? '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+  rui: ENV.RUI_PK ?? '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
 };
 
 const CLAIM_TYPES = {
   kyc: keccak256(toHex('KYC_AML_VERIFIED')),
   accredited: keccak256(toHex('ACCREDITED_INVESTOR')),
 };
+const CLAIM_TYPE_NAMES = {
+  [CLAIM_TYPES.kyc]: 'KYC_AML_VERIFIED',
+  [CLAIM_TYPES.accredited]: 'ACCREDITED_INVESTOR',
+};
 const CLAIM_STATUS = ['UNVERIFIED', 'VERIFIED', 'FAILED', 'EXPIRED', 'REVOKED'];
 const PASSPORT_STATUS = ['NONE', 'IN_PROGRESS', 'LIMITED', 'GREEN', 'RED', 'REVOKED', 'EXPIRED'];
 
 const MIN_SQRT_PRICE_PLUS_1 = 4295128740n;
 const MAX_SQRT_PRICE_MINUS_1 = 1461446703485210103287273052203988822378723970341n;
+const LIQUIDITY_STEP = 2_000000000000000000n;
+
+// canonical CREATE2 deployer (hook address mining) — anvil ships it at genesis
+// but anvil_reset drops it, so reset re-etches it
+const CREATE2_DEPLOYER = '0x4e59b44847b379578588920cA78FbF26c0B4956C';
+const CREATE2_DEPLOYER_CODE =
+  '0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3';
 
 const POOL_KEY_ABI = {
   type: 'tuple',
@@ -177,6 +206,74 @@ const ERC20_ABI = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
 ];
 
+// events the tx inspector can decode
+const INSPECTOR_EVENTS = [
+  {
+    type: 'event',
+    name: 'ClaimUpdated',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'claimType', type: 'bytes32', indexed: true },
+      { name: 'status', type: 'uint8', indexed: false },
+      { name: 'approved', type: 'bool', indexed: false },
+      { name: 'verificationIdHash', type: 'bytes32', indexed: true },
+      { name: 'attestationHash', type: 'bytes32', indexed: false },
+      { name: 'expiresAt', type: 'uint64', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'ClaimRevoked',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'claimType', type: 'bytes32', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PassportMinted',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'status', type: 'uint8', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PassportStatusUpdated',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'status', type: 'uint8', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PassportRevoked',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'tokenId', type: 'uint256', indexed: true },
+    ],
+  },
+  { type: 'event', name: 'Locked', inputs: [{ name: 'tokenId', type: 'uint256', indexed: false }] },
+  MODIFY_LIQUIDITY_EVENT,
+  SWAP_EVENT,
+  {
+    type: 'event',
+    name: 'Initialize',
+    inputs: [
+      { name: 'id', type: 'bytes32', indexed: true },
+      { name: 'currency0', type: 'address', indexed: true },
+      { name: 'currency1', type: 'address', indexed: true },
+      { name: 'fee', type: 'uint24', indexed: false },
+      { name: 'tickSpacing', type: 'int24', indexed: false },
+      { name: 'hooks', type: 'address', indexed: false },
+      { name: 'sqrtPriceX96', type: 'uint160', indexed: false },
+      { name: 'tick', type: 'int24', indexed: false },
+    ],
+  },
+];
+
 // ---------------------------------------------------------------- world boot
 
 async function rpcCall(method, params = []) {
@@ -184,7 +281,7 @@ async function rpcCall(method, params = []) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    signal: AbortSignal.timeout(2000),
+    signal: AbortSignal.timeout(5000),
   });
   const body = await res.json();
   if (body.error) throw new Error(body.error.message);
@@ -209,37 +306,50 @@ function deployWorld() {
   if (out.status !== 0) throw new Error(`deploy failed:\n${out.stdout}\n${out.stderr}`);
 }
 
-let A; // addresses.json content
+let A;
+let LOCAL;
+let CHAIN;
 let publicClient;
 let wallets;
 let actorAddress;
 let pools;
+let logCache;
 
 function loadWorld() {
   A = JSON.parse(readFileSync(ADDRESSES_FILE, 'utf8'));
-  publicClient = createPublicClient({ chain: foundry, transport: httpTransport(RPC_URL) });
+  CHAIN = A.chainId === 31337 ? foundry : A.chainId === sepolia.id ? sepolia : { ...foundry, id: A.chainId };
+  publicClient = createPublicClient({ chain: CHAIN, transport: httpTransport(RPC_URL) });
   wallets = Object.fromEntries(
     Object.entries(KEYS).map(([name, pk]) => [
       name,
-      createWalletClient({ account: privateKeyToAccount(pk), chain: foundry, transport: httpTransport(RPC_URL) }),
+      createWalletClient({ account: privateKeyToAccount(pk), chain: CHAIN, transport: httpTransport(RPC_URL) }),
     ]),
   );
   actorAddress = Object.fromEntries(Object.entries(wallets).map(([n, w]) => [n, w.account.address]));
   const base = { currency0: A.token0, currency1: A.token1, fee: A.fee, tickSpacing: A.tickSpacing };
   pools = {
-    deal: { key: { ...base, hooks: A.dealHook }, hook: A.dealHook, label: 'Deal Room pool' },
-    investor: { key: { ...base, hooks: A.investorHook }, hook: A.investorHook, label: 'Investor pool' },
+    deal: { key: { ...base, hooks: A.dealHook }, id: poolIdOf({ ...base, hooks: A.dealHook }), hook: A.dealHook },
+    investor: { key: { ...base, hooks: A.investorHook }, id: poolIdOf({ ...base, hooks: A.investorHook }), hook: A.investorHook },
   };
+  logCache = { nextBlock: BigInt(A.deployBlock ?? 0), logs: [] };
 }
 
 async function ensureWorld() {
-  if (!(await rpcUp())) {
+  const up = await rpcUp();
+  const chainIdHex = up ? await rpcCall('eth_chainId') : null;
+  LOCAL = !up || chainIdHex === '0x7a69'; // 31337 — or we are about to spawn anvil
+
+  if (!up) {
+    if (ENV.RPC_URL && !ENV.RPC_URL.includes('127.0.0.1') && !ENV.RPC_URL.includes('localhost')) {
+      throw new Error(`RPC ${RPC_URL} is unreachable`);
+    }
     console.log('[hook-demo] starting anvil…');
     const child = spawn('anvil', ['--silent'], { detached: true, stdio: 'ignore' });
     child.unref();
     for (let i = 0; i < 30 && !(await rpcUp()); i++) await new Promise((r) => setTimeout(r, 500));
     if (!(await rpcUp())) throw new Error(`anvil did not come up on ${RPC_URL}`);
   }
+
   let needDeploy = !existsSync(ADDRESSES_FILE);
   if (!needDeploy) {
     const { dealHook } = JSON.parse(readFileSync(ADDRESSES_FILE, 'utf8'));
@@ -247,21 +357,52 @@ async function ensureWorld() {
     const code = await probe.getCode({ address: dealHook }).catch(() => undefined);
     needDeploy = !code || code === '0x';
   }
-  if (needDeploy) deployWorld();
+  if (needDeploy) {
+    if (!LOCAL) {
+      throw new Error(
+        'demo world not found on this chain — deploy first:\n' +
+          '  cd contracts && forge script script/DeployHookDemo.s.sol --rpc-url $RPC_URL --broadcast\n' +
+          '(set OPERATOR_PK / ANA_PK / RUI_PK / POOL_MANAGER — see .env.example)',
+      );
+    }
+    await ensureCreate2Deployer();
+    deployWorld();
+  }
   loadWorld();
 }
 
 await ensureWorld();
-console.log(`[hook-demo] world ready — deal hook ${A.dealHook}`);
+console.log(`[hook-demo] world ready — chain ${A.chainId}${LOCAL ? ' (local)' : ''} — deal hook ${A.dealHook}`);
 
 // ---------------------------------------------------------------- chain ops
 
 let verificationCounter = 0;
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const saltOf = (wallet) => pad(wallet, { size: 32 }).toLowerCase();
 
 async function chainNow() {
   const block = await publicClient.getBlock();
   return Number(block.timestamp);
+}
+
+async function refreshLogs() {
+  const latest = await publicClient.getBlockNumber({ cacheTime: 0 });
+  if (latest >= logCache.nextBlock) {
+    const fresh = await publicClient.request({
+      method: 'eth_getLogs',
+      params: [
+        {
+          fromBlock: toHex(logCache.nextBlock),
+          toBlock: toHex(latest),
+          address: A.poolManager,
+          topics: [[MODIFY_LIQUIDITY_TOPIC, SWAP_TOPIC]],
+        },
+      ],
+    });
+    logCache.logs.push(...fresh);
+    logCache.nextBlock = latest + 1n;
+  }
+  return logCache.logs;
 }
 
 async function write(actor, address, abi, functionName, args) {
@@ -290,29 +431,27 @@ async function balancesOf(wallet) {
   };
 }
 
-async function claimState(wallet, claimType) {
+function deltasBetween(before, after) {
+  return Object.fromEntries(
+    Object.keys(after).map((sym) => [sym, (Number(after[sym]) - Number(before[sym])).toFixed(2)]),
+  );
+}
+
+async function claimState(wallet, claimType, now) {
   const c = await publicClient.readContract({
     address: A.claimRegistry,
     abi: REGISTRY_ABI,
     functionName: 'getClaim',
     args: [wallet, claimType],
   });
-  const valid = await publicClient.readContract({
-    address: A.claimRegistry,
-    abi: REGISTRY_ABI,
-    functionName: 'hasValidClaim',
-    args: [wallet, claimType],
-  });
-  const now = await chainNow();
   const expired = c.expiresAt !== 0n && now > Number(c.expiresAt) && CLAIM_STATUS[c.status] === 'VERIFIED';
   return {
     status: expired ? 'EXPIRED' : CLAIM_STATUS[c.status],
-    valid,
     expiresAt: c.expiresAt === 0n ? null : Number(c.expiresAt),
   };
 }
 
-async function actorState(name) {
+async function actorState(name, now, positions) {
   const wallet = actorAddress[name];
   const [statusIdx, tokenId, dealOk, investorOk, dealReason, investorReason] = await Promise.all([
     publicClient.readContract({ address: A.compliancePassport, abi: PASSPORT_ABI, functionName: 'statusOf', args: [wallet] }),
@@ -323,17 +462,22 @@ async function actorState(name) {
     publicClient.readContract({ address: A.investorHook, abi: HOOK_ABI, functionName: 'reasonFor', args: [wallet] }),
   ]);
   const b32ToString = (h) => Buffer.from(h.slice(2), 'hex').toString('utf8').replace(/\0+$/g, '');
+  const salt = saltOf(wallet);
   return {
     name,
     wallet,
     passport: { status: PASSPORT_STATUS[statusIdx], tokenId: Number(tokenId) },
     claims: {
-      kyc: await claimState(wallet, CLAIM_TYPES.kyc),
-      accredited: await claimState(wallet, CLAIM_TYPES.accredited),
+      kyc: await claimState(wallet, CLAIM_TYPES.kyc, now),
+      accredited: await claimState(wallet, CLAIM_TYPES.accredited, now),
     },
     access: {
       deal: { allowed: dealOk, reason: b32ToString(dealReason) || null },
       investor: { allowed: investorOk, reason: b32ToString(investorReason) || null },
+    },
+    positions: {
+      deal: formatEther(positions.get(`${pools.deal.id}|${salt}`) ?? 0n),
+      investor: formatEther(positions.get(`${pools.investor.id}|${salt}`) ?? 0n),
     },
     balances: await balancesOf(wallet),
   };
@@ -353,23 +497,26 @@ async function doSwap(actor, poolName, zeroForOne) {
     { takeClaims: false, settleUsingBurn: false },
     encodeAbiParameters([{ type: 'address' }], [wallet]),
   ]);
-  const after = await balancesOf(wallet);
-  const delta = Object.fromEntries(
-    Object.keys(after).map((sym) => [sym, (Number(after[sym]) - Number(before[sym])).toFixed(2)]),
-  );
-  return { ok: true, txHash, delta };
+  return { ok: true, txHash, delta: deltasBetween(before, await balancesOf(wallet)) };
 }
 
 async function doLiquidity(actor, poolName, direction) {
   const pool = pools[poolName];
   const wallet = actorAddress[actor];
-  const delta = direction === 'remove' ? -2_000000000000000000n : 2_000000000000000000n;
+  const before = await balancesOf(wallet);
+  const delta = direction === 'remove' ? -LIQUIDITY_STEP : LIQUIDITY_STEP;
   const txHash = await write(actor, A.liquidityRouter, LIQUIDITY_ROUTER_ABI, 'modifyLiquidity', [
     pool.key,
     { tickLower: -887220, tickUpper: 887220, liquidityDelta: delta, salt: pad(wallet, { size: 32 }) },
     encodeAbiParameters([{ type: 'address' }], [wallet]),
   ]);
-  return { ok: true, txHash };
+  const { positions } = aggregateLiquidity(await refreshLogs());
+  return {
+    ok: true,
+    txHash,
+    delta: deltasBetween(before, await balancesOf(wallet)),
+    position: formatEther(positions.get(`${pool.id}|${saltOf(wallet)}`) ?? 0n),
+  };
 }
 
 async function doVerify(actor, claim, approved) {
@@ -401,22 +548,127 @@ async function doRevokePassport(actor) {
 }
 
 async function doTimewarp(days) {
+  if (!LOCAL) return { ok: false, reason: 'LOCAL_ONLY', message: 'timewarp only works on local anvil' };
   await rpcCall('evm_increaseTime', [days * 24 * 3600]);
   await rpcCall('evm_mine', []);
   return { ok: true, warpedDays: days };
 }
 
+async function ensureCreate2Deployer() {
+  const code = await rpcCall('eth_getCode', [CREATE2_DEPLOYER, 'latest']);
+  if (!code || code === '0x') {
+    await rpcCall('anvil_setCode', [CREATE2_DEPLOYER, CREATE2_DEPLOYER_CODE]);
+  }
+}
+
 async function doReset() {
+  if (!LOCAL) return { ok: false, reason: 'LOCAL_ONLY', message: 'reset only works on local anvil' };
+  await rpcCall('anvil_reset', []);
+  await ensureCreate2Deployer();
   deployWorld();
   loadWorld();
   return { ok: true };
+}
+
+// ---------------------------------------------------------------- tx inspector
+
+function friendlyArg(name, value) {
+  if (name === 'claimType' && CLAIM_TYPE_NAMES[value]) return CLAIM_TYPE_NAMES[value];
+  if (name === 'status' && typeof value === 'number') return PASSPORT_STATUS[value] ?? CLAIM_STATUS[value] ?? value;
+  if (typeof value === 'bigint') {
+    if (name === 'expiresAt' || name === 'tokenId' || name === 'fee') return value.toString();
+    const abs = value < 0n ? -value : value;
+    if (abs >= 10n ** 12n) return `${Number(formatEther(value)).toFixed(4)}e18`;
+    return value.toString();
+  }
+  return String(value);
+}
+
+function contractLabel(address) {
+  const a = address.toLowerCase();
+  const map = {
+    [A.claimRegistry.toLowerCase()]: 'ClaimRegistry',
+    [A.compliancePassport.toLowerCase()]: 'CompliancePassport',
+    [A.accessGate.toLowerCase()]: 'AccessGate',
+    [A.poolManager.toLowerCase()]: 'PoolManager',
+    [A.swapRouter.toLowerCase()]: 'SwapRouter',
+    [A.liquidityRouter.toLowerCase()]: 'LiquidityRouter',
+    [A.token0.toLowerCase()]: A.token0Symbol,
+    [A.token1.toLowerCase()]: A.token1Symbol,
+    [A.dealHook.toLowerCase()]: 'ComplianceHook (deal)',
+    [A.investorHook.toLowerCase()]: 'ComplianceHook (investor)',
+  };
+  return map[a] ?? short(address);
+}
+
+// ERC-20 (value in data) and ERC-721 (tokenId indexed) share the Transfer topic;
+// try them separately since ABI decoders stop at the first name match
+const TRANSFER_VARIANTS = [
+  [
+    {
+      type: 'event',
+      name: 'Transfer',
+      inputs: [
+        { name: 'from', type: 'address', indexed: true },
+        { name: 'to', type: 'address', indexed: true },
+        { name: 'tokenId', type: 'uint256', indexed: true },
+      ],
+    },
+  ],
+  [
+    {
+      type: 'event',
+      name: 'Transfer',
+      inputs: [
+        { name: 'from', type: 'address', indexed: true },
+        { name: 'to', type: 'address', indexed: true },
+        { name: 'value', type: 'uint256', indexed: false },
+      ],
+    },
+  ],
+];
+
+async function inspectTx(hash) {
+  const { decodeEventLog } = await import('viem');
+  const [receipt, tx] = await Promise.all([
+    publicClient.getTransactionReceipt({ hash }),
+    publicClient.getTransaction({ hash }),
+  ]);
+  const block = await publicClient.getBlock({ blockNumber: receipt.blockNumber });
+  const logs = receipt.logs.map((log) => {
+    for (const abi of [INSPECTOR_EVENTS, ...TRANSFER_VARIANTS]) {
+      try {
+        const dec = decodeEventLog({ abi, data: log.data, topics: log.topics });
+        return {
+          contract: contractLabel(log.address),
+          name: dec.eventName,
+          args: Object.fromEntries(
+            Object.entries(dec.args).map(([k, v]) => [k, friendlyArg(k, v)]),
+          ),
+        };
+      } catch {}
+    }
+    return { contract: contractLabel(log.address), name: 'unknown', topic: log.topics[0]?.slice(0, 10) };
+  });
+  return {
+    ok: true,
+    hash,
+    status: receipt.status,
+    blockNumber: receipt.blockNumber.toString(),
+    timestamp: Number(block.timestamp),
+    from: tx.from,
+    to: tx.to,
+    contract: tx.to ? contractLabel(tx.to) : null,
+    gasUsed: receipt.gasUsed.toString(),
+    logs,
+  };
 }
 
 // ---------------------------------------------------------------- http
 
 function json(res, code, body) {
   res.writeHead(code, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(body, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
 }
 
 async function readBody(req) {
@@ -440,10 +692,17 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(readFileSync(path.join(__dirname, 'index.html')));
     } else if (req.method === 'GET' && url.pathname === '/api/state') {
-      const actors = await Promise.all(Object.keys(KEYS).map(actorState));
+      const now = await chainNow();
+      const { positions, totals } = aggregateLiquidity(await refreshLogs());
+      const prices = lastPrices(logCache.logs);
+      const actors = await Promise.all(Object.keys(KEYS).map((n) => actorState(n, now, positions)));
       json(res, 200, {
         actors,
-        now: await chainNow(),
+        now,
+        warped: LOCAL && Math.abs(now * 1000 - Date.now()) > 86_400_000,
+        local: LOCAL,
+        explorer: EXPLORER_URL,
+        chainId: A.chainId,
         contracts: {
           claimRegistry: A.claimRegistry,
           compliancePassport: A.compliancePassport,
@@ -453,7 +712,21 @@ const server = http.createServer(async (req, res) => {
           investorHook: A.investorHook,
         },
         pool: { token0: A.token0Symbol, token1: A.token1Symbol, fee: A.fee },
+        pools: Object.fromEntries(
+          Object.entries(pools).map(([name, p]) => [
+            name,
+            {
+              hook: p.hook,
+              liquidity: Number(formatEther(totals.get(p.id) ?? 0n)).toFixed(0),
+              price: (prices.get(p.id) ?? 1).toFixed(4),
+            },
+          ]),
+        ),
       });
+    } else if (req.method === 'GET' && url.pathname.startsWith('/api/tx/')) {
+      const hash = url.pathname.slice('/api/tx/'.length);
+      if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return json(res, 400, { ok: false, message: 'bad tx hash' });
+      json(res, 200, await inspectTx(hash).catch(failure));
     } else if (req.method === 'POST' && url.pathname === '/api/swap') {
       const { actor, pool = 'deal', zeroForOne = true } = await readBody(req);
       if (!wallets[actor] || !pools[pool]) return json(res, 400, { ok: false, message: 'unknown actor or pool' });
