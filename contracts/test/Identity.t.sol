@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.24;
+
+import {Test} from "forge-std/Test.sol";
+import {Identity} from "../src/Identity.sol";
+import {KeyPurpose, ClaimTopics} from "../src/libraries/Types.sol";
+
+/// Minimal mocks so Identity can be tested before the real IssuerRegistry/ClaimIssuer exist.
+contract MockIssuerRegistry {
+    mapping(address => mapping(uint256 => bool)) public trusted;
+    function setTrusted(address issuer, uint256 topic, bool ok) external { trusted[issuer][topic] = ok; }
+    function isTrusted(address issuer, uint256 topic) external view returns (bool) { return trusted[issuer][topic]; }
+    function issuersForTopic(uint256) external pure returns (address[] memory) { return new address[](0); }
+}
+
+contract MockClaimIssuer {
+    bool public valid = true;
+    function setValid(bool v) external { valid = v; }
+    function isClaimValid(address, uint256, bytes calldata, bytes calldata) external view returns (bool) {
+        return valid;
+    }
+}
+
+contract IdentityTest is Test {
+    Identity id;
+    MockIssuerRegistry reg;
+    MockClaimIssuer issuer;
+
+    address owner = address(0xBEEF);
+    address stranger = address(0xCAFE);
+    uint256 constant KYC = 0; // set in setUp from ClaimTopics
+
+    uint256 kyc;
+    bytes sig = hex"01";
+    bytes data = hex"02";
+    uint64 exp = 0;
+
+    function setUp() public {
+        kyc = ClaimTopics.KYC_VERIFIED;
+        reg = new MockIssuerRegistry();
+        issuer = new MockClaimIssuer();
+        id = new Identity(owner, address(reg));
+        reg.setTrusted(address(issuer), kyc, true);
+    }
+
+    function test_owner_seeded_as_management() public view {
+        // MANAGEMENT satisfies any purpose → owner passes CLAIM
+        assertTrue(id.keyHasPurpose(id.keyForAddress(owner), KeyPurpose.CLAIM));
+        assertFalse(id.keyHasPurpose(id.keyForAddress(stranger), KeyPurpose.CLAIM));
+    }
+
+    function test_getClaim_empty() public view {
+        (bool exists,,) = id.getClaim(kyc, address(issuer));
+        assertFalse(exists);
+    }
+
+    function test_submitClaim_by_owner_lands() public {
+        vm.prank(owner);
+        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        (bool exists, bytes memory s, bytes memory d) = id.getClaim(kyc, address(issuer));
+        assertTrue(exists);
+        assertEq(s, sig);
+        assertEq(d, data);
+    }
+
+    function test_submitClaim_nonOwner_reverts() public {
+        vm.prank(stranger);
+        vm.expectRevert(Identity.NoClaimKey.selector);
+        id.submitClaim(kyc, address(issuer), sig, data, exp);
+    }
+
+    function test_submitClaim_untrustedIssuer_reverts() public {
+        MockClaimIssuer rogue = new MockClaimIssuer(); // not trusted in the registry
+        vm.prank(owner);
+        vm.expectRevert(Identity.UntrustedIssuer.selector);
+        id.submitClaim(kyc, address(rogue), sig, data, exp);
+    }
+
+    function test_submitClaim_badSignature_reverts() public {
+        issuer.setValid(false);
+        vm.prank(owner);
+        vm.expectRevert(Identity.BadSignature.selector);
+        id.submitClaim(kyc, address(issuer), sig, data, exp);
+    }
+
+    function test_revokeClaim_holder_ok_and_hides_claim() public {
+        vm.prank(owner);
+        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        vm.prank(owner);
+        id.revokeClaim(kyc, address(issuer));
+        (bool exists,,) = id.getClaim(kyc, address(issuer));
+        assertFalse(exists); // holder-side removal hides it from the gate
+    }
+
+    function test_revokeClaim_stranger_reverts() public {
+        vm.prank(owner);
+        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        vm.prank(stranger);
+        vm.expectRevert(Identity.NotAuthorized.selector);
+        id.revokeClaim(kyc, address(issuer));
+    }
+}
