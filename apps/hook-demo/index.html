@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComplianceHook — PassportCreds by Node</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234A9EFF'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>PC</text></svg>">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root {
+    --bg: #F0F2F6; --card: #FFFFFF; --border: #DDE1EA;
+    --ink: #0D1428; --body: #4B5568; --muted: #9CA3AF;
+    --cyan: #4A9EFF; --teal: #3DDBD9;
+    --green: #16A34A; --green-bg: #DCFCE7;
+    --amber: #CA8A04; --amber-bg: #FEF9C3;
+    --red: #DC2626; --red-bg: #FEE2E2;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+  nav { background: var(--card); border-bottom: 1px solid var(--border); }
+  .nav-in { max-width: 1160px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-sq { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(90deg, var(--cyan), var(--teal)); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 12px; }
+  .logo b { font-size: 14px; }
+  .logo span { color: var(--muted); font-size: 12.5px; }
+  .chain { font: 500 11.5px var(--mono); color: var(--body); border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; }
+  .chain i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-right: 6px; }
+  .chain.up i { background: var(--green); }
+
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 30px 24px 64px; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); margin: 0 0 4px; }
+  h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; }
+  h1 .grad { background: linear-gradient(90deg, var(--cyan), var(--teal)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .sub { color: var(--body); max-width: 74ch; margin: 0 0 20px; }
+
+  .pools { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 22px; }
+  .pool { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .pool h3 { margin: 0; font-size: 14px; }
+  .pool p { margin: 2px 0 0; font-size: 12px; color: var(--body); }
+  .pool .addr { font: 500 11px var(--mono); color: var(--muted); }
+  .policy { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+  .policy.deal { background: var(--amber-bg); color: var(--amber); }
+  .policy.inv { background: var(--green-bg); color: var(--green); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+  .card h2 { margin: 0; font-size: 16px; text-transform: capitalize; }
+  .role { color: var(--body); font-size: 12px; margin: 1px 0 10px; }
+
+  .badge { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+  .badge.NONE, .badge.UNVERIFIED, .badge.IN_PROGRESS { background: #EEF0F4; color: var(--muted); }
+  .badge.LIMITED { background: var(--amber-bg); color: var(--amber); }
+  .badge.GREEN, .badge.VERIFIED { background: var(--green-bg); color: var(--green); }
+  .badge.RED, .badge.REVOKED, .badge.FAILED, .badge.EXPIRED { background: var(--red-bg); color: var(--red); }
+
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #F1F3F7; font-size: 12.5px; }
+  .row:last-of-type { border-bottom: 0; }
+  .row .k { color: var(--body); }
+  .row .v { font: 500 11.5px var(--mono); color: var(--ink); display: flex; align-items: center; gap: 6px; }
+  .ok { color: var(--green); font-weight: 700; }
+  .no { color: var(--red); font-weight: 700; }
+  .reason { font: 500 10px var(--mono); color: var(--red); }
+
+  .btns { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  button { font: 600 12px 'Inter', sans-serif; padding: 7px 11px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--ink); }
+  button:hover:not(:disabled) { border-color: var(--cyan); }
+  button:disabled { opacity: .45; cursor: wait; }
+  button.primary { background: linear-gradient(90deg, var(--cyan), var(--teal)); border: 0; color: #fff; }
+  .ops { border-top: 1px dashed var(--border); margin-top: 14px; padding-top: 10px; }
+  .ops .label { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+  button.verify { color: var(--green); border-color: #BBE7C9; }
+  button.danger { color: var(--red); border-color: #F3C4C4; }
+
+  .globalbar { display: flex; gap: 8px; align-items: center; margin: 20px 0 0; }
+  .globalbar .label { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+
+  .log-card { margin-top: 18px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .log-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .log-head h2 { margin: 0; font-size: 15px; }
+  #log { margin-top: 10px; max-height: 280px; overflow-y: auto; background: #0D1428; border-radius: 8px; padding: 12px 14px; font: 12px/1.75 var(--mono); color: #C7D0DE; }
+  #log .t { color: #5C6A82; }
+  #log .good { color: #4ADE80; }
+  #log .bad { color: #F87171; }
+  #log div { white-space: nowrap; }
+
+  details { margin-top: 18px; color: var(--body); font-size: 13px; }
+  details summary { cursor: pointer; color: var(--ink); font-weight: 600; }
+  details ol { margin: 8px 0 0; padding-left: 20px; }
+  details li { margin: 4px 0; }
+  .foot { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  .foot code { font-family: var(--mono); font-size: 11px; }
+</style>
+</head>
+<body>
+<nav><div class="nav-in">
+  <div class="logo"><div class="logo-sq">PC</div><div><b>PassportCreds</b> <span>by Node · ComplianceHook demo</span></div></div>
+  <span class="chain" id="chain"><i></i><span id="chainlabel">connecting…</span></span>
+</div></nav>
+
+<div class="wrap">
+  <p class="eyebrow">Uniswap v4 · Surface #4</p>
+  <h1>A pool that <span class="grad">reads your passport</span></h1>
+  <p class="sub">Both pools call the same <b>AccessGate</b> that guards the Deal Room — before every swap and
+    every liquidity add. No new eligibility logic, no allowlists to maintain: verify, revoke or expire a claim
+    and the pools react instantly. Removing liquidity is never gated — funds are never trapped.</p>
+
+  <div class="pools" id="pools"></div>
+  <div class="grid" id="actors"></div>
+
+  <div class="globalbar">
+    <span class="label">World</span>
+    <button onclick="timewarp()">⏩ Fast-forward 1 year</button>
+    <button onclick="resetWorld()">↺ Reset world</button>
+  </div>
+
+  <div class="log-card">
+    <div class="log-head"><h2>On-chain log</h2><button id="clearlog">clear</button></div>
+    <div id="log"><div class="t">waiting for first action…</div></div>
+  </div>
+
+  <details>
+    <summary>Demo script (2 minutes)</summary>
+    <ol>
+      <li><b>Rui swaps</b> — no passport → pool reverts <code>NotCompliant(KYC_MISSING)</code>.</li>
+      <li><b>⚡ Verify Ana's KYC</b> (simulated CRE: submitClaim + syncPassport) → passport LIMITED → she trades the <b>Deal Room pool</b>.</li>
+      <li><b>Ana tries the Investor pool</b> → <code>ACCREDITATION_MISSING</code>. Verify accreditation → GREEN → unlocked.</li>
+      <li><b>Ana adds liquidity</b>, then <b>revoke her KYC claim</b> → both pools refuse her — but <b>Exit position still works</b>. Never trap funds.</li>
+      <li><b>⏩ Fast-forward 1 year</b> — the operator's own claims expire; even the LP that seeded the pools gets <code>KYC_EXPIRED</code>. Compliance is live, not a snapshot.</li>
+    </ol>
+  </details>
+
+  <p class="foot">Local demo on anvil · contracts: <code id="addrs"></code></p>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const short = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '—';
+const busy = new Set();
+let POOL = { token0: 'PROP', token1: 'mUSD' };
+
+const ROLES = {
+  operator: 'Issuer, simulated CRE & liquidity provider',
+  ana: 'Investor being onboarded during the demo',
+  rui: 'Stranger — no passport',
+};
+
+function log(line) {
+  const div = document.createElement('div');
+  div.innerHTML = `<span class="t">${new Date().toLocaleTimeString()}</span> ${line}`;
+  $('#log').prepend(div);
+}
+
+function claimRow(label, c) {
+  const exp = c.expiresAt ? ` · exp ${new Date(c.expiresAt * 1000).toISOString().slice(0, 10)}` : '';
+  return `<div class="row"><span class="k">${label}</span>
+    <span class="v"><span class="badge ${c.status}">${c.status}</span><span style="color:var(--muted);font-size:10px">${exp}</span></span></div>`;
+}
+
+function accessRow(label, a) {
+  return `<div class="row"><span class="k">${label}</span>
+    <span class="v">${a.allowed ? '<span class="ok">✓ allowed</span>' : `<span class="no">✗</span> <span class="reason">${a.reason ?? ''}</span>`}</span></div>`;
+}
+
+function actorCard(a) {
+  const dis = busy.has(a.name) ? 'disabled' : '';
+  return `<div class="card">
+    <div class="card-top">
+      <div><h2>${a.name}</h2><p class="role">${ROLES[a.name] ?? ''}</p></div>
+      <span class="badge ${a.passport.status}">passport · ${a.passport.status}</span>
+    </div>
+    <div class="row"><span class="k">wallet</span><span class="v">${short(a.wallet)}</span></div>
+    ${claimRow('KYC / AML', a.claims.kyc)}
+    ${claimRow('Accredited investor', a.claims.accredited)}
+    ${accessRow('Deal Room pool', a.access.deal)}
+    ${accessRow('Investor pool', a.access.investor)}
+    <div class="row"><span class="k">${POOL.token0} / ${POOL.token1}</span><span class="v">${a.balances[POOL.token0]} / ${a.balances[POOL.token1]}</span></div>
+    <div class="btns">
+      <button class="primary" ${dis} onclick="swap('${a.name}','deal')">Swap · Deal pool</button>
+      <button ${dis} onclick="swap('${a.name}','investor')">Swap · Investor pool</button>
+      <button ${dis} onclick="liq('${a.name}','deal','add')">Add liquidity</button>
+      <button ${dis} onclick="liq('${a.name}','deal','remove')">Exit position</button>
+    </div>
+    <div class="ops"><div class="label">Issuer / CRE controls</div>
+      <div class="btns" style="margin-top:0">
+        <button class="verify" ${dis} onclick="verify('${a.name}','kyc',true)">⚡ Verify KYC</button>
+        <button class="verify" ${dis} onclick="verify('${a.name}','accredited',true)">⚡ Verify accreditation</button>
+        <button class="danger" ${dis} onclick="verify('${a.name}','kyc',false)">Fail KYC</button>
+        <button class="danger" ${dis} onclick="revokeClaim('${a.name}','kyc')">Revoke KYC claim</button>
+        <button class="danger" ${dis} onclick="revokePassport('${a.name}')">Revoke passport ⚠</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function render() {
+  try {
+    const r = await fetch('/api/state');
+    const s = await r.json();
+    POOL = s.pool;
+    $('#chain').classList.add('up');
+    $('#chainlabel').textContent = 'anvil · 31337 · ' + new Date(s.now * 1000).toISOString().slice(0, 10);
+    $('#pools').innerHTML = `
+      <div class="pool"><div><h3>Deal Room pool <span class="addr">${short(s.contracts.dealHook)}</span></h3>
+        <p>${POOL.token0}/${POOL.token1} · 0.3% · gate: canAccessDealRoom</p></div>
+        <span class="policy deal">Limited or Green</span></div>
+      <div class="pool"><div><h3>Investor pool <span class="addr">${short(s.contracts.investorHook)}</span></h3>
+        <p>${POOL.token0}/${POOL.token1} · 0.3% · gate: canAccessInvestorArea</p></div>
+        <span class="policy inv">Green only</span></div>`;
+    $('#actors').innerHTML = s.actors.map(actorCard).join('');
+    $('#addrs').textContent =
+      `gate ${short(s.contracts.accessGate)} · registry ${short(s.contracts.claimRegistry)} · passport ${short(s.contracts.compliancePassport)} · poolManager ${short(s.contracts.poolManager)}`;
+  } catch {
+    $('#chain').classList.remove('up');
+    $('#chainlabel').textContent = 'server unreachable';
+  }
+}
+
+async function post(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json();
+}
+
+async function act(actor, fn) {
+  busy.add(actor);
+  render();
+  try { await fn(); } finally { busy.delete(actor); render(); }
+}
+
+window.swap = (actor, pool) => act(actor, async () => {
+  const r = await post('/api/swap', { actor, pool, zeroForOne: true });
+  if (r.ok) {
+    const d = Object.entries(r.delta).map(([s, v]) => `${Number(v) >= 0 ? '+' : ''}${v} ${s}`).join(', ');
+    log(`${actor} swap on ${pool} pool <span class="good">✓ filled</span> (${d}) tx ${short(r.txHash)}`);
+  } else log(`${actor} swap on ${pool} pool <span class="bad">✗ ${r.reason}</span> — ${r.message}`);
+});
+
+window.liq = (actor, pool, direction) => act(actor, async () => {
+  const verb = direction === 'remove' ? 'exit position' : 'add liquidity';
+  const r = await post('/api/liquidity', { actor, pool, direction });
+  if (r.ok) log(`${actor} ${verb} (${pool}) <span class="good">✓</span> tx ${short(r.txHash)}`);
+  else log(`${actor} ${verb} (${pool}) <span class="bad">✗ ${r.reason}</span> — ${r.message}`);
+});
+
+window.verify = (actor, claim, approved) => act(actor, async () => {
+  const label = approved ? `verify ${claim}` : `fail ${claim}`;
+  const r = await post('/api/verify', { actor, claim, approved });
+  if (r.ok) log(`CRE: ${label} for ${actor} <span class="good">✓</span> ${r.txHashes.map(short).join(', ')}`);
+  else log(`CRE: ${label} for ${actor} <span class="bad">✗</span> ${r.message}`);
+});
+
+window.revokeClaim = (actor, claim) => act(actor, async () => {
+  const r = await post('/api/revoke-claim', { actor, claim });
+  if (r.ok) log(`issuer: revoke ${claim} claim of ${actor} <span class="good">✓</span> ${r.txHashes.map(short).join(', ')}`);
+  else log(`issuer: revoke ${claim} of ${actor} <span class="bad">✗</span> ${r.message}`);
+});
+
+window.revokePassport = (actor) => act(actor, async () => {
+  const r = await post('/api/revoke-passport', { actor });
+  if (r.ok) log(`issuer: revoke passport of ${actor} <span class="good">✓</span> (permanent) ${r.txHashes.map(short).join(', ')}`);
+  else log(`issuer: revoke passport of ${actor} <span class="bad">✗</span> ${r.message}`);
+});
+
+window.timewarp = async () => {
+  const r = await post('/api/timewarp', { days: 366 });
+  log(r.ok ? `world: fast-forwarded ${r.warpedDays} days <span class="good">✓</span>` : `timewarp <span class="bad">✗</span> ${r.message}`);
+  render();
+};
+
+window.resetWorld = async () => {
+  log('world: redeploying…');
+  const r = await post('/api/reset', {});
+  log(r.ok ? 'world: reset <span class="good">✓</span> fresh contracts deployed' : `reset <span class="bad">✗</span> ${r.message}`);
+  render();
+};
+
+$('#clearlog').onclick = () => { $('#log').innerHTML = ''; };
+
+render();
+setInterval(render, 6000);
+</script>
+</body>
+</html>
