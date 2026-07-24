@@ -320,3 +320,8 @@ deploy-testnet:
 
 hook-demo:
 	@cd apps/hook-demo && npm install --no-fund --no-audit && npm start
+
+hook-demo-explorer:
+	@echo "Otterscan explorer for the local anvil chain → http://localhost:5100"
+	@docker run --rm -p 5100:80 --add-host=host.docker.internal:host-gateway \
+	  -e ERIGON_URL=http://host.docker.internal:8545 otterscan/otterscan:latest
