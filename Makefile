@@ -315,3 +315,8 @@ deploy-testnet:
 	@echo "    cre/.env"
 	@echo "    apps/web/.env.local"
 	@echo ""
+
+# ─── Uniswap v4 hook demo ─────────────────────────────────────────────────────
+
+hook-demo:
+	@cd apps/hook-demo && npm install --no-fund --no-audit && npm start
