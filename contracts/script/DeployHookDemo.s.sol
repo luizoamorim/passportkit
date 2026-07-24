@@ -22,20 +22,27 @@ import {ComplianceHook} from "../src/hooks/ComplianceHook.sol";
 
 /**
  * @title DeployHookDemo
- * @notice Deploys the full ComplianceHook demo world on local Anvil:
+ * @notice Deploys the full ComplianceHook demo world:
  *         PassportCreds stack → v4 PoolManager + test routers → two gated pools
  *         (Deal Room policy + Investor policy) with liquidity → funded actors.
  *         Writes every address to apps/hook-demo/addresses.json.
  *
- * Usage (local anvil):
+ * Local anvil (dev accounts #0 operator, #1 ana, #2 rui — no env needed):
  *   forge script script/DeployHookDemo.s.sol --rpc-url http://localhost:8545 --broadcast
  *
- * Anvil dev accounts: #0 operator (admin + CRE simulator + LP), #1 ana, #2 rui.
+ * Testnet (e.g. Ethereum Sepolia — set env, see apps/hook-demo/.env.example):
+ *   OPERATOR_PK / ANA_PK / RUI_PK  — funded private keys (operator pays deploys)
+ *   POOL_MANAGER                   — canonical v4 PoolManager (skips local deploy)
+ *   forge script script/DeployHookDemo.s.sol --rpc-url $RPC_URL --broadcast
  */
 contract DeployHookDemo is Script {
-    uint256 constant OPERATOR_PK = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
-    uint256 constant ANA_PK = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
-    uint256 constant RUI_PK = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;
+    uint256 constant ANVIL_OPERATOR_PK = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+    uint256 constant ANVIL_ANA_PK = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
+    uint256 constant ANVIL_RUI_PK = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;
+
+    uint256 OPERATOR_PK;
+    uint256 ANA_PK;
+    uint256 RUI_PK;
 
     ClaimRegistry registry;
     CompliancePassport passport;
@@ -54,7 +61,12 @@ contract DeployHookDemo is Script {
     uint256 nonce;
 
     function run() external {
-        require(block.chainid == 31337, "local demo only");
+        OPERATOR_PK = vm.envOr("OPERATOR_PK", ANVIL_OPERATOR_PK);
+        ANA_PK = vm.envOr("ANA_PK", ANVIL_ANA_PK);
+        RUI_PK = vm.envOr("RUI_PK", ANVIL_RUI_PK);
+        if (block.chainid != 31337) {
+            require(OPERATOR_PK != ANVIL_OPERATOR_PK, "set OPERATOR_PK / ANA_PK / RUI_PK for non-local chains");
+        }
 
         operator = vm.addr(OPERATOR_PK);
         ana = vm.addr(ANA_PK);
@@ -88,7 +100,10 @@ contract DeployHookDemo is Script {
         registry.grantRole(registry.CRE_UPDATER_ROLE(), operator);
         passport.grantRole(passport.CRE_UPDATER_ROLE(), operator);
 
-        poolManager = new PoolManager(operator);
+        address existingPoolManager = vm.envOr("POOL_MANAGER", address(0));
+        poolManager = existingPoolManager != address(0)
+            ? PoolManager(existingPoolManager)
+            : new PoolManager(operator);
         swapRouter = new PoolSwapTest(poolManager);
         liquidityRouter = new PoolModifyLiquidityTest(poolManager);
 
@@ -178,7 +193,8 @@ contract DeployHookDemo is Script {
     function _writeAddresses() internal {
         string memory json = string.concat(
             '{\n',
-            '  "chainId": 31337,\n',
+            '  "chainId": ', vm.toString(block.chainid), ',\n',
+            '  "deployBlock": ', vm.toString(block.number), ',\n',
             '  "claimRegistry": "', vm.toString(address(registry)), '",\n',
             '  "compliancePassport": "', vm.toString(address(passport)), '",\n',
             '  "accessGate": "', vm.toString(address(gate)), '",\n',
