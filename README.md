@@ -241,10 +241,24 @@ CRE workflow per verification:
 | `ClaimRegistry.sol` | AccessControl | Stores verified claims per wallet. Only CRE can write. |
 | `CompliancePassport.sol` | ERC-721 + ERC-5192 | Soulbound passport. Minted on first claim. Status derived from ClaimRegistry. |
 | `AccessGate.sol` | Read-only | Reads ClaimRegistry + CompliancePassport. Answers `canAccessDealRoom`, `canAccessInvestorArea`. |
+| `hooks/ComplianceHook.sol` | Uniswap v4 hook | Gates swaps + liquidity adds on AccessGate. Exit is never gated. |
 
 Claims: `KYC_AML_VERIFIED` · `ACCREDITED_INVESTOR`
 
 Passport status: `NONE → IN_PROGRESS → LIMITED → GREEN` (or `RED` on KYC failure, `REVOKED` by admin)
+
+### Uniswap v4 ComplianceHook
+
+The same AccessGate that guards the Deal Room can guard a Uniswap v4 pool: the
+ComplianceHook checks the swapper (and liquidity provider) in `beforeSwap` /
+`beforeAddLiquidity` and reverts `NotCompliant(wallet, reasonCode)` for anyone the
+gate refuses — removing liquidity is deliberately ungated so funds are never trapped.
+Two demo pools show policy separation: a Deal Room pool (LIMITED or GREEN) and an
+Investor pool (GREEN only).
+
+- Local demo: `make hook-demo` → http://localhost:4180 (spawns anvil + deploys everything)
+- Tests: `cd contracts && forge test --match-contract ComplianceHookTest`
+- Spec & design notes: [`docs/specs/uniswap-hook-spec.md`](docs/specs/uniswap-hook-spec.md)
 
 ---
 
