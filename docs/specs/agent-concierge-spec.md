@@ -44,6 +44,9 @@
 > - **Single-owner grant simplification stands as specced** (§3.2): both
 >   `grantMandate` and `revokeMandate` are callable by any single owner; production
 >   would gate grants behind the m-of-n threshold.
+> - **Mock vendor is client-priced with no invoice registry** — the x402-style
+>   402 → pay → retry flow is real, but the amount comes from the caller rather than
+>   a quote the vendor issued; a signed quote/invoice registry is event-day hardening.
 
 ## 1. Thesis
 
@@ -197,3 +200,8 @@ revoke (permanent).
    only LPs, so drift is a demo footnote, not a risk.
 4. **0G availability** — decider falls back to `mock` if 0G is unreachable (same
    "Simulate Verified" philosophy as the product).
+5. **Single-owner mandate grant is a blast radius** — because any one owner can
+   `grantMandate`, that owner can name a wallet they control, mint unlimited CASA to
+   it via `fundConcierge` and drain the pool's mUSD side through the gated pool
+   (treasury-held mUSD is untouched — rail 2 still needs m-of-n). Accepted hackathon
+   simplification; production gates grants behind the same threshold as payments.

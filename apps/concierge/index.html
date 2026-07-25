@@ -314,7 +314,7 @@ function ticketRow(t) {
       <span><span class="amt">${t.amount} mUSD</span> <span class="badge ${status}">${status}</span></span>
     </div>
     <p class="why">${t.decision?.rationale ?? ''}${conf}</p>
-    ${t.refusal ? `<div class="refusal">hook refused: ${t.refusal.reason}${t.refusal.message ? ` — ${t.refusal.message}` : ''}</div>` : ''}
+    ${t.refusal ? `<div class="refusal">${t.refusal.source === 'treasury' ? 'treasury' : 'hook'} refused: ${t.refusal.reason}${t.refusal.message ? ` — ${t.refusal.message}` : ''}</div>` : ''}
     <div class="meta">
       <span>#${t.id} · ${t.category}</span>
       <span>evidence ${short(t.evidenceHash)}</span>
