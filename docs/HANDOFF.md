@@ -25,7 +25,7 @@
 - **Frontend screens:** identity + World + passport, deal-room gate, agent-link. _(No `/admin` screen for the demo — tenant setup is a one-time ops step; in-app admin console is roadmap, see §3a.)_
 - **World ID:** real IDKit integration (Rafael) — **mock for now**.
 - **Agent linking:** on-chain wiring + endpoint (Noé).
-- **Ops (split):** **Noé** registers + wraps `passportkit.eth` and points its resolver to `PassportResolver` (+ post-deploy `setApprovalForAll(registrar)` from the owner wallet); **Luiz** sets `ENS_PARENT_NODE` (Noé's namehash), runs the deploy (wires the tenant), fills `.env` from `deployments/<chainid>.json`.
+- **Ops (split):** **Noé** registers + wraps `casaazul.eth` and points its resolver to `PassportResolver` (+ post-deploy `setApprovalForAll(registrar)` from the owner wallet); **Luiz** sets `ENS_PARENT_NODE` (Noé's namehash), runs the deploy (wires the tenant), fills `.env` from `deployments/<chainid>.json`.
 
 ---
 
@@ -88,11 +88,11 @@ graph TD
 
 ### 3a. Tenant setup — one-time OPS, not an app screen
 
-For the demo we register **one** parent name, `passportkit.eth`, up front and wire it once. **There is no `/admin` screen** — the deploy script does the tenant wiring. All test identities hang **below** `passportkit.eth` as subnames (`alice.passportkit.eth`); agents get subnames too.
+For the demo the tenant is **Casa Azul** (white-label story: PassportKit is the kit; Casa Azul is a brand using it). We register **one** parent name, **`casaazul.eth`** (ENS-normalized — no space), up front and wire it once. **There is no `/admin` screen** — the deploy script does the tenant wiring. All test identities hang **below** `casaazul.eth` as subnames (`alice.casaazul.eth`); agents get subnames too (`bot1.casaazul.eth`).
 
-1. **(Noé)** Register + wrap `passportkit.eth` on the ENS app (Sepolia) — the registering wallet owns it (the tenant owner).
+1. **(Noé)** Register + wrap `casaazul.eth` on the ENS app (Sepolia) — the registering wallet owns it (the tenant owner).
 2. **(Noé)** Point its resolver to `PassportResolver` (`setResolver`), and share the namehash with Luiz.
-3. **(Luiz)** Set `ENS_PARENT_NODE` (namehash of `passportkit.eth`) in `contracts/.env` → `DeployPassportKit.s.sol` calls `resolver.setTenant(parentNode, gate, policyId, registrar)` automatically at deploy time.
+3. **(Luiz)** Set `ENS_PARENT_NODE` (namehash of `casaazul.eth`) in `contracts/.env` → `DeployPassportKit.s.sol` calls `resolver.setTenant(parentNode, gate, policyId, registrar)` automatically at deploy time.
 4. **(Noé, name owner)** Post-deploy: `NameWrapper.setApprovalForAll(registrar, true)` so the registrar can mint subnames.
 
 > **Roadmap (not built for the demo):** an in-app **admin console** where a tenant self-serves this — register a name, pick a policy, wire the tenant from the UI. For the demo it's a scripted ops step; we present the console as the productization path.
@@ -202,12 +202,12 @@ sequenceDiagram
 ### Noé — Subgraph + agent identity + "the show"
 > Continue Luiz Henrique's starters: the **subgraph starter** and the on-chain **`linkAgent`/`unlinkAgent`** foundation are already built — you extend them, not start from zero. Build now against MOCK/local until addresses land.
 - **Subgraph:** index `IdentityCreated`, `AgentLinked`/`AgentUnlinked`, ClaimIssuer revocation events, `GatedERC20 Transfer`; feed it the deployed addresses + `startBlock` from `deployments/<chainid>.json`.
-- **Agent identity:** `POST /identity/link-agent` (+ `unlink`) backend endpoint (AGENT_ROLE → `IdentityFactory.linkAgent`, mirror the just-built `POST /identity/create`); `registrar.issueSubname` path for agent subnames; frontend "My Agents" wiring.
+- **Agent identity (one call = agent + ENS):** `POST /identity/link-agent` (+ `unlink`) backend endpoint (AGENT_ROLE, mirror the just-built `POST /identity/create`) does BOTH in sequence: `IdentityFactory.linkAgent(agentWallet, personIdentity)` **and** `PassportSubnameRegistrar.issueSubname(parentNode, "bot1", agentWallet, personIdentity)`. After that the agent's subname (`bot1.casaazul.eth`) resolves everything live with no extra step: `compliance.status`, `agent-registration` = "1" (ENSIP-25), `agent.reputation` = score. Then frontend "My Agents" wiring.
 - **The show:** the live view / graph that makes the revoke-cascade visible.
-- **ENS parent name (you own it):** register + wrap `passportkit.eth` on Sepolia and point its resolver to `PassportResolver` (`setResolver`); after the deploy, `NameWrapper.setApprovalForAll(registrar, true)` (must come from the name-owner wallet — that's you). ⚠️ Whoever registers it becomes the tenant owner — **agree the wallet with Luiz first**, then share the name's **namehash** with Luiz for `ENS_PARENT_NODE`.
+- **ENS parent name (you own it):** register + wrap `casaazul.eth` on Sepolia and point its resolver to `PassportResolver` (`setResolver`); after the deploy, `NameWrapper.setApprovalForAll(registrar, true)` (must come from the name-owner wallet — that's you). ⚠️ Whoever registers it becomes the tenant owner — **agree the wallet with Luiz first**, then share the name's **namehash** with Luiz for `ENS_PARENT_NODE`.
 
 ### Luiz Henrique — Ops + glue (this afternoon; Rafael & Noé do NOT wait on this)
-- **Deploy (Sepolia):** set `ENS_PARENT_NODE` (the `passportkit.eth` namehash from Noé) in `contracts/.env` so `DeployPassportKit.s.sol` wires `setTenant` automatically; run the deploy; copy `deployments/11155111.json` into api + web `.env` and the subgraph manifest. _(ENS name registration + resolver + subname approval are Noé's — see his lane.)_
+- **Deploy (Sepolia):** set `ENS_PARENT_NODE` (the `casaazul.eth` namehash from Noé) in `contracts/.env` so `DeployPassportKit.s.sol` wires `setTenant` automatically; run the deploy; copy `deployments/11155111.json` into api + web `.env` and the subgraph manifest. _(ENS name registration + resolver + subname approval are Noé's — see his lane.)_
 - **Backend `POST /identity/create`:** ✅ already built (`feature/backend-identity-create`) — just needs the deployed factory address in `.env`.
 - **ENSIP-25 (Verifiable Agent Identity):** the "clever ENS" upgrade — `PassportResolver` serves the `agent-registration[...]` text record **computed live** from `IdentityFactory` (link an agent → the ENSIP-25 attestation exists; unlink → it flips off). Full impl spec: [`specs/ensip-25-agent-identity.md`](./specs/ensip-25-agent-identity.md).
 - **Decide** the personhood-policy question (§5) — default already wired, just confirm/flip.
