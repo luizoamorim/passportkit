@@ -10,10 +10,12 @@
 > `ETHLisbon2026/FINAL/doc/` (outer prep repo).
 
 > **Status: implemented** (2026-07-25) — contracts in `contracts/src/agents/` +
-> `contracts/src/hooks/MandateHook.sol`, runtime and UI in `apps/concierge/`
-> (`make concierge-demo` → :4190, mock x402 vendor on :4191). 29 Solidity tests
-> (HouseToken 4 · HouseTreasury 18 · MandateHook 7) + 28 node:test. Deltas found
-> during implementation:
+> `contracts/src/hooks/MandateHook.sol`, demo at **`/concierge` in `apps/web`** (house
+> header, agent standing, owner KYC controls, ticket composer + feed, approval queue and
+> the tx inspector; driven by `/api/demo/world` + `/api/demo/concierge` with the mock x402
+> vendor at `/api/demo/vendor`, all of which need `DEMO_MODE=true` and a world deployed by
+> `contracts/script/DeployAll.s.sol`). 29 Solidity tests (HouseToken 4 · HouseTreasury 18 ·
+> MandateHook 7) + 28 node:test. Deltas found during implementation:
 >
 > - **Rail 1 uses exact-*output* swaps.** §4 says "swap CASA→mUSD"; an exact-input
 >   swap of `amount` CASA nets less than `amount` mUSD (0.3% pool fee) and cannot
