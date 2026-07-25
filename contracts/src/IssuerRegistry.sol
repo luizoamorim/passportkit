@@ -19,6 +19,7 @@ contract IssuerRegistry is AccessControl {
     event TrustedSet(address indexed issuer, uint256 indexed topic, bool ok);
 
     error ZeroAdmin();
+    error ZeroIssuer();
 
     constructor(address admin) {
         if (admin == address(0)) revert ZeroAdmin();
@@ -34,7 +35,7 @@ contract IssuerRegistry is AccessControl {
     }
 
     function setTrusted(address issuer, uint256 topic, bool ok) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(issuer != address(0), "zero issuer");
+        if (issuer == address(0)) revert ZeroIssuer();
         if (ok == _trusted[issuer][topic]) return; // no-op: don't emit a phantom state transition
         if (ok) {
             _trusted[issuer][topic] = true;

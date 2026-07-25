@@ -47,7 +47,7 @@ contract EligibilityGate is AccessControl {
 
     function isEligible(address identity, uint256 policyId) external view returns (bool ok, bytes32 reason) {
         if (identity == address(0) || identity.code.length == 0) return (false, Reason.NO_IDENTITY);
-        uint256[] memory req = policyTopics[policyId];
+        uint256[] storage req = policyTopics[policyId]; // storage ref — no memory copy
         if (req.length == 0) return (false, Reason.NO_POLICY); // fail-closed: an unset policy denies
         for (uint256 i; i < req.length; ++i) {
             if (!_hasValidClaim(identity, req[i])) return (false, _reasonFor(req[i]));

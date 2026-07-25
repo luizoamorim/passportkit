@@ -22,6 +22,8 @@ contract IdentityFactory is AccessControl {
 
     error ZeroAdmin();
     error ZeroIssuerRegistry();
+    error ZeroWallet();
+    error IdentityExists();
 
     constructor(address admin, address issuerRegistry_) {
         if (admin == address(0)) revert ZeroAdmin();
@@ -32,8 +34,8 @@ contract IdentityFactory is AccessControl {
     }
 
     function createIdentity(address wallet) external onlyRole(AGENT_ROLE) returns (address identity) {
-        require(wallet != address(0), "zero wallet");
-        require(identityOfWallet[wallet] == address(0), "exists");
+        if (wallet == address(0)) revert ZeroWallet();
+        if (identityOfWallet[wallet] != address(0)) revert IdentityExists();
         identity = address(new Identity(wallet, issuerRegistry));
         identityOfWallet[wallet] = identity;
         emit IdentityCreated(wallet, identity);
