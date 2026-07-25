@@ -1,12 +1,12 @@
 # ComplianceHook demo
 
 Local demo of the Uniswap v4 **ComplianceHook** — two pools gated by the same
-AccessGate that guards the Deal Room:
+EligibilityGate that guards every other PassportKit surface:
 
 | Pool | Policy | Who can swap / add liquidity |
 |---|---|---|
-| Deal Room pool | `canAccessDealRoom` | passport LIMITED or GREEN |
-| Investor pool | `canAccessInvestorArea` | passport GREEN only |
+| Deal Room pool | `#1` | identity with a valid `KYC_VERIFIED` claim |
+| Investor pool | `#2` | identity with `KYC_VERIFIED` + `ACCREDITED_INVESTOR` |
 
 Removing liquidity is never gated — funds are never trapped.
 
@@ -26,18 +26,19 @@ world (`contracts/script/DeployHookDemo.s.sol`) if the hooks aren't on-chain.
 
 | actor | role | starts with |
 |---|---|---|
-| operator | issuer + simulated CRE + LP | GREEN passport (seeded both pools) |
-| ana | investor onboarded live | nothing |
-| rui | stranger | nothing |
+| operator | admin + issuer signer + LP | identity with both claims (seeded both pools) |
+| ana | investor, accreditation pending | identity + `KYC_VERIFIED` |
+| rui | stranger | identity, zero claims |
 
-Every card shows the passport, both claims (with expiry), pool access with the
+Every card shows the identity, both claims (with expiry), pool access with the
 hook's reason code, the actor's **LP position per pool**, and token balances.
 Swap/liquidity log lines carry the exact token deltas.
 
 ## Transactions
 
 - **Built-in inspector** — click any tx hash in the log: status, gas, and fully
-  decoded events (`ClaimUpdated`, `PassportMinted`, `Swap`, `ModifyLiquidity`, …).
+  decoded events (`IdentityCreated`, `ClaimAdded`, `RevocationSet`, `Swap`,
+  `ModifyLiquidity`, …).
 - **Otterscan** (optional, local explorer UI): `make hook-demo-explorer`
   (Docker; anvil exposes the `ots_*` API natively) → http://localhost:5100.
 - **Testnet explorer** — set `EXPLORER_URL` in `.env` and hashes also link out
@@ -59,14 +60,15 @@ Timewarp and reset are local-only; claim-expiry demos need real time on testnets
 
 ## Demo script (~2 min)
 
-1. **Rui swaps** → `NotCompliant(KYC_MISSING)`.
-2. **⚡ Verify Ana's KYC** (submitClaim + syncPassport, like the CRE) → LIMITED →
-   Deal Room pool trades.
-3. **Ana on the Investor pool** → `ACCREDITATION_MISSING`; verify accreditation →
-   GREEN → unlocked.
-4. **Ana adds liquidity** (watch position + deltas), revoke her KYC claim → pools
-   refuse her — **Exit still works**.
-5. **⏩ Fast-forward 1 year** → claims expire; even the operator gets `KYC_EXPIRED`.
+1. **Rui swaps** → `NotCompliant(MISSING_KYC)`.
+2. **⚡ Verify Rui's KYC** (the issuer signs EIP-712, Rui submits it to his own
+   Identity) → Deal Room pool trades.
+3. **Ana on the Investor pool** → `MISSING_ACCREDITED`; verify accreditation →
+   unlocked.
+4. **Ana adds liquidity** (watch position + deltas), **Revoke KYC ⚠**
+   (`ClaimIssuer.setRevoked`) → pools refuse her — **Exit still works**.
+   **Restore KYC** re-opens the latch and she is back in.
+5. **⏩ Fast-forward 1 year** → claims expire; even the operator gets `MISSING_KYC`.
 6. Click a **tx hash** — decoded events, straight from the chain.
 
 ## API
@@ -77,13 +79,15 @@ GET  /api/tx/<hash>        receipt + decoded events
 POST /api/swap             {"actor":"ana","pool":"deal|investor","zeroForOne":true}
 POST /api/liquidity        {"actor":"ana","pool":"deal","direction":"add|remove"}
 POST /api/verify           {"actor":"ana","claim":"kyc|accredited","approved":true}
-POST /api/revoke-claim     {"actor":"ana","claim":"kyc"}
-POST /api/revoke-passport  {"actor":"ana"}          (permanent, like the real contract)
+                           (issuer signs EIP-712 → holder submits; approved:false revokes)
+POST /api/revoke-claim     {"actor":"ana","claim":"kyc"}   issuer latch on
+POST /api/restore-claim    {"actor":"ana","claim":"kyc"}   issuer latch off
+POST /api/revoke-passport  {"actor":"ana"}                 every topic at once
 POST /api/timewarp         {"days":366}             (local only)
 POST /api/reset            {}                       (local only)
 ```
 
 Refusals come back decoded from v4's `WrappedError`, e.g.
-`{"ok":false,"reason":"ACCREDITATION_MISSING","message":"NotCompliant(0x7099…79C8, ACCREDITATION_MISSING)"}`.
+`{"ok":false,"reason":"MISSING_ACCREDITED","message":"NotCompliant(0x7099…79C8, MISSING_ACCREDITED)"}`.
 
 `npm test` covers the revert decoder, env parsing, and position aggregation.
