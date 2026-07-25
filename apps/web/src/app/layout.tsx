@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AppShell } from '@/components/shell/AppShell';
 import { PrivyAppProvider } from '@/providers/PrivyAppProvider';
 
 export const metadata: Metadata = {
@@ -11,7 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="antialiased">
-        <PrivyAppProvider>{children}</PrivyAppProvider>
+        <PrivyAppProvider>
+          <AppShell>{children}</AppShell>
+        </PrivyAppProvider>
       </body>
     </html>
   );

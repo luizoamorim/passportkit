@@ -5,15 +5,18 @@
 > autonomously handles routine expenses and escalates anything above threshold to the
 > owners. Builds on the shipped stack (ClaimRegistry / CompliancePassport / AccessGate)
 > and the v4 ComplianceHook — **zero changes to deployed core contracts**.
->
-> Status: designed 2026-07-25, not yet implemented. Companion analysis in
-> `ETHLisbon2026/FINAL/doc/` (outer prep repo).
+> Companion analysis in `ETHLisbon2026/FINAL/doc/` (outer prep repo).
 
 > **Status: implemented** (2026-07-25) — contracts in `contracts/src/agents/` +
-> `contracts/src/hooks/MandateHook.sol`, runtime and UI in `apps/concierge/`
-> (`make concierge-demo` → :4190, mock x402 vendor on :4191). 29 Solidity tests
-> (HouseToken 4 · HouseTreasury 18 · MandateHook 7) + 28 node:test. Deltas found
-> during implementation:
+> `contracts/src/hooks/MandateHook.sol`, demo at **`/concierge` in `apps/web`** (house
+> header, agent standing, owner KYC controls, ticket composer + feed, approval queue and
+> the tx inspector; driven by `/api/demo/world` + `/api/demo/concierge` with the mock x402
+> vendor at `/api/demo/vendor/invoice`, all of which need `DEMO_MODE=true` and a world deployed by
+> `contracts/script/DeployAll.s.sol`). **Run it: `make demo` → http://localhost:3003/concierge.**
+> §5 and §6 below described a standalone node service on its own port; that service was folded
+> into `apps/web` and deleted, so the runtime is now route handlers and the UI is a route —
+> read those sections with `apps/web` substituted throughout. 29 Solidity tests (HouseToken 4 ·
+> HouseTreasury 18 · MandateHook 7) + 39 node:test. Deltas found during implementation:
 >
 > - **Rail 1 uses exact-*output* swaps.** §4 says "swap CASA→mUSD"; an exact-input
 >   swap of `amount` CASA nets less than `amount` mUSD (0.3% pool fee) and cannot
@@ -122,11 +125,12 @@ deferred-execution surface (no keepers, no cron).
 **Kill-switch:** owner KYC revoked ⇒ both rails refuse the agent in the same block.
 Mandate revoked ⇒ same. CASA reclaimed ⇒ budget gone.
 
-## 5. Agent runtime — `apps/concierge/`
+## 5. Agent runtime — `apps/web/src/app/api/demo/` + `apps/web/src/lib/demo/`
 
-Node service in the hook-demo house style (zero framework, viem, node:test):
+Next route handlers over plain viem libs (zero framework beyond Next, node:test), all
+gated on `DEMO_MODE=true`:
 
-- **Ticket intake** — `POST /tickets {description, vendor, quoteAmount, category}`.
+- **Ticket intake** — `POST /api/demo/concierge {action:'ticket', description, amount, category}`.
 - **Decision engine** — adapter interface `decide(ticket, context) → {action:
   pay|propose|reject, rationale, confidence}`:
   - `mock` (default): deterministic rules — category allowlist, quote vs caps.
@@ -141,17 +145,19 @@ Node service in the hook-demo house style (zero framework, viem, node:test):
   approvals.
 - **Chain reads** — `ChainData` adapter: direct RPC now; `subgraph` adapter at the
   event (entities: House, Mandate, Ticket, Payment, Approval) → Graph AI continuity.
-- **x402 vendor** — separate tiny mock server (`apps/concierge/vendor/`): quotes a
-  job, returns HTTP 402 with payment requirements, verifies settlement, marks invoice
-  paid.
+- **x402 vendor** — mock plumber at `POST /api/demo/vendor/invoice`: quotes a job,
+  returns HTTP 402 with payment requirements, verifies settlement against the chain,
+  marks the invoice paid.
 
-## 6. Demo — `apps/concierge/` UI
+## 6. Demo — the `/concierge` route in `apps/web`
 
-PassportCreds branding, hook-demo skeleton reused (self-healing boot, tx inspector,
-reset/timewarp local-only). Panels: house card (treasury mUSD, pool depth, agent CASA
+Not its own app: a route on the one site, inside the shared `AppShell` (nav, wallet,
+chain chip, demo banner) and built from the shared demo components — so the wallet you
+connected on `/passport` is still connected here, and a reset resets the same world
+`/markets` is reading. Panels: house card (treasury mUSD, pool depth, agent CASA
 budget), ticket feed with the agent's rationale per ticket, owner approval queue,
 owner controls (fund concierge, revoke mandate, revoke owner KYC via existing issuer
-flow), on-chain log.
+flow), on-chain log, tx inspector (shared with `/markets`), reset/timewarp local-only.
 
 Scripted beats: €120 faucet auto-paid (rail 1) → €4,500 roof queued + approved
 (rail 2) → budget exhaustion → **owner-KYC-revoke kill-switch** → restore → mandate
@@ -164,20 +170,20 @@ revoke (until re-granted).
   m-of-n approval edge cases (double-approve, non-owner, execute-before-threshold);
   hook gating for owner vs agent vs stranger; exit always free; CASA reclaim;
   owner-revocation kill-switch on both rails in the same block.
-- **node:test** (`apps/concierge/test/`): decision adapters (mock rules table),
-  x402 client against the mock vendor, evidence hashing, decode helpers reused.
+- **node:test** (`npm test --workspace=apps/web`, sources in `apps/web/test/demo/`):
+  decision adapters (mock rules table), x402 client against the mock vendor, evidence
+  hashing, decode helpers, pool-position aggregation. 39 green.
 
 ## 8. Documentation deliverables (part of the implementation, not an afterthought)
 
-- `apps/concierge/README.md` — run instructions, actor table, demo script, API table,
-  env template (`env.example`: RPC, explorer, keys, `DECIDER=mock|openai|zerog`,
-  0G + subgraph placeholders).
+- Root `README.md` — Quick Start (`npm install && make demo`), the route table, the
+  concierge rows in the contracts table and its section, `apps/web/env.example` for the
+  env template (RPC, explorer, keys, `DECIDER=mock|openai|zerog`).
 - This spec updated to **Status: implemented** with any design deltas (as done for
   the hook spec).
-- Root `README.md` — concierge row in the contracts table + short section with
-  `make concierge-demo`.
-- `CLAUDE.md` — agents layer summary (contracts, standing rule, adapter pattern).
-- `Makefile` — `concierge-demo` target.
+- `CLAUDE.md` — agents layer summary (contracts, standing rule, adapter pattern) plus
+  the demo-runtime section (routes, response shapes, `DEMO_MODE`).
+- `Makefile` — the `demo` target; there is no per-demo target any more.
 - Dated changelog entry (`WHATS-NEW.md`) — required evidence for 0G/continuity judging.
 
 ## 9. Prize & event plan (continuity-only assumption — reconfirm with organizers)

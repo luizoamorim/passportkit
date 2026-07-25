@@ -5,6 +5,43 @@
 
 ---
 
+## 2026-07-25 — One site, one demo command
+
+- **Three demos became one website.** The Uniswap hook demo and the House Concierge
+  demo were standalone node servers on their own ports, with their own HTML, their own
+  chain world and their own wallet story. Both are now **routes on `apps/web`** —
+  `/markets` and `/concierge` — beside the product's `/passport` and `/deal-room`. A
+  visitor connects a wallet once on the landing page and walks all four: *get verified
+  → enter the Deal Room → trade a compliant pool → hand an agent a mandate*.
+- **One chain world.** `contracts/script/DeployAll.s.sol` replaces the two per-demo
+  deploy scripts: one PassportKit stack, one v4 PoolManager, three pools (Deal Room,
+  Investor, CASA/mUSD) and the house treasury, all written to a single
+  `apps/web/demo-addresses.json`. This fixes the old bug where resetting one demo wiped
+  the other's contracts — `↺ Reset` now resets the world both routes are reading.
+- **One command.** `npm install && make demo` starts anvil (or reuses one already
+  listening), deploys that world and serves the site on **:3003** with `DEMO_MODE=true`.
+  `make demo-stop` takes it down and only kills a chain `make demo` itself started;
+  `make demo-explorer` puts Otterscan on :5100 over the demo chain. Both ports are
+  overridable (`RPC_PORT=`, `WEB_PORT=`) so two worlds can run side by side.
+- **The demo runtime moved into Next.** The two `server.js` files are now route handlers
+  under `apps/web/src/app/api/demo/**` (`world`, `markets`, `concierge`, `tx/<hash>`,
+  `vendor/invoice`) over the same viem libs, moved unchanged, in `apps/web/src/lib/demo/`.
+  Every handler calls `assertDemo()` first and answers **403 unless `DEMO_MODE=true`** —
+  the anvil actor keys stay server-side and never reach a `NEXT_PUBLIC_*` var. With the
+  flag off, `/passport` and `/deal-room` work normally and the two demo routes say so.
+- **One design system, one wallet.** A shared `AppShell` (nav, connect button, chain
+  chip, demo banner) is mounted by the root layout, so the connection survives every
+  navigation; the two demo pages were rebuilt on the app's existing tokens instead of
+  porting their standalone CSS.
+- **Retired:** `apps/hook-demo/` and `apps/concierge/`, their Makefile targets and their
+  deploy scripts are deleted. **The `:4180` and `:4190` instructions in the entry below
+  are historical — `make demo` is the only demo command now.**
+- **Tests:** 116 green in `contracts/` (unchanged — no contract was touched) and 39
+  node:test in `apps/web` (decider rules, x402 client, evidence hashing, revert
+  decoding, pool-position aggregation), up from 28 across the two retired apps.
+
+---
+
 ## 2026-07-25 — Uniswap v4 hook + House Concierge Agent
 
 - **Uniswap v4 `ComplianceHook` + local demo** (PR #1) — the AccessGate that guards the

@@ -1,6 +1,7 @@
 .PHONY: help up up-testnet down api cre web db migrate ngrok logs \
         test-kyc test-green test-red status stop reset-db \
-        build-cre env-check deploy-testnet deploy-local anvil
+        build-cre env-check deploy-testnet deploy-local anvil \
+        demo demo-chain demo-deploy demo-web demo-stop demo-explorer
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -13,11 +14,42 @@ WEB_LOG       := /tmp/passport-web.log
 NGROK_LOG     := /tmp/passport-ngrok.log
 ANVIL_LOG     := /tmp/passport-anvil.log
 
+# ─── The unified demo ─────────────────────────────────────────────────────────
+# Both ports are overridable so a second copy of the repo can run its own world
+# without touching the one already on :8545 —
+#   make demo RPC_PORT=8546 WEB_PORT=3010
+
+RPC_PORT        ?= 8545
+WEB_PORT        ?= 3003
+DEMO_RPC        := http://127.0.0.1:$(RPC_PORT)
+DEMO_URL        := http://localhost:$(WEB_PORT)
+# All keyed by the port they describe, so `make demo RPC_PORT=8546 WEB_PORT=3010`
+# writes its own files instead of overwriting the first world's.
+DEMO_ANVIL_LOG  := /tmp/passport-demo-anvil-$(RPC_PORT).log
+DEMO_DEPLOY_LOG := /tmp/passport-demo-deploy-$(RPC_PORT).log
+DEMO_WEB_LOG    := /tmp/passport-demo-web-$(WEB_PORT).log
+# Written only when `demo-chain` starts an anvil itself — `demo-stop` kills the
+# chain only if this says the demo owns it. Keyed by port so two demos on two
+# ports do not claim each other's node.
+DEMO_ANVIL_PID  := /tmp/passport-demo-anvil-$(RPC_PORT).pid
+
+# The canonical CREATE2 deployer the v4 hook address mining needs. Anvil ships
+# it at genesis but anvil_reset drops it, so a demo re-run on an already-reset
+# chain re-etches it rather than failing with "missing CREATE2 deployer".
+CREATE2_ADDR := 0x4e59b44847b379578588920cA78FbF26c0B4956C
+CREATE2_CODE := 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3
+
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
 help:
 	@echo ""
 	@echo "  PassportCreds by Node — dev commands"
+	@echo ""
+	@echo "  The demo"
+	@echo "    make demo          — anvil + one deployed world + the site on :$(WEB_PORT)"
+	@echo "                         (override with RPC_PORT=… WEB_PORT=…)"
+	@echo "    make demo-stop     — stop that site, and its anvil if make demo started it"
+	@echo "    make demo-explorer — Otterscan on :5100 against the demo chain"
 	@echo ""
 	@echo "  Setup"
 	@echo "    make env-check     — verify .env files exist"
@@ -61,9 +93,11 @@ env-check:
 	@test -f apps/web/.env.local || (echo "WARNING: apps/web/.env.local missing — copy from apps/web/.env.example"; true)
 	@echo "✓ .env files OK"
 
+# Replaces the chain on :8545 only. This used to `pkill -f "anvil"`, which also
+# killed a `make demo` chain running on some other port.
 anvil:
 	@echo "→ Starting Anvil (local EVM node) on :8545 (log: $(ANVIL_LOG))"
-	@pkill -f "anvil" 2>/dev/null || true
+	@lsof -ti:8545 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
 	@anvil > $(ANVIL_LOG) 2>&1 &
 	@sleep 2
 	@curl -sf -X POST http://localhost:8545 \
@@ -316,17 +350,107 @@ deploy-testnet:
 	@echo "    apps/web/.env.local"
 	@echo ""
 
-# ─── Uniswap v4 hook demo ─────────────────────────────────────────────────────
+# ─── The unified demo — one command ───────────────────────────────────────────
 
-hook-demo:
-	@cd apps/hook-demo && npm install --no-fund --no-audit && npm start
+demo: demo-chain demo-deploy demo-web
+	@echo ""
+	@echo "══════════════════════════════════════════"
+	@echo "  PassportKit demo — one world, one site"
+	@echo ""
+	@echo "  Chain:     $(DEMO_RPC) (anvil)"
+	@echo "  Site:      $(DEMO_URL)"
+	@echo ""
+	@echo "  1. Get verified      $(DEMO_URL)/passport"
+	@echo "  2. Enter the room    $(DEMO_URL)/deal-room"
+	@echo "  3. Trade the pool    $(DEMO_URL)/markets"
+	@echo "  4. Mandate an agent  $(DEMO_URL)/concierge"
+	@echo ""
+	@echo "  Logs: $(DEMO_ANVIL_LOG) · $(DEMO_DEPLOY_LOG) · $(DEMO_WEB_LOG)"
+	@echo "  Stop: make demo-stop"
+	@echo "══════════════════════════════════════════"
+	@echo ""
 
-hook-demo-explorer:
-	@echo "Otterscan explorer for the local anvil chain → http://localhost:5100"
-	@docker run --rm -p 5100:80 --add-host=host.docker.internal:host-gateway \
-	  -e ERIGON_URL=http://host.docker.internal:8545 otterscan/otterscan:latest
+# Reuses an anvil that is already listening rather than restarting it — a
+# restart would wipe the world every other demo is pointed at. A reused chain is
+# somebody else's: no pid stamp is written, so `demo-stop` leaves it alone.
+demo-chain:
+	@if curl -sf -m 2 -X POST $(DEMO_RPC) -H "Content-Type: application/json" \
+	     -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' > /dev/null 2>&1; then \
+	  echo "✓ Anvil already up on :$(RPC_PORT) — reusing it (make demo-stop will leave it running)"; \
+	else \
+	  echo "→ Starting Anvil on :$(RPC_PORT) (log: $(DEMO_ANVIL_LOG))"; \
+	  anvil --port $(RPC_PORT) > $(DEMO_ANVIL_LOG) 2>&1 & \
+	  echo $$! > $(DEMO_ANVIL_PID); \
+	  for i in 1 2 3 4 5 6 7 8 9 10; do \
+	    sleep 1; \
+	    curl -sf -m 2 -X POST $(DEMO_RPC) -H "Content-Type: application/json" \
+	      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' > /dev/null 2>&1 && break; \
+	  done; \
+	  curl -sf -m 2 -X POST $(DEMO_RPC) -H "Content-Type: application/json" \
+	    -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' > /dev/null 2>&1 \
+	    && echo "✓ Anvil up on :$(RPC_PORT)" \
+	    || (echo "✗ Anvil failed — check $(DEMO_ANVIL_LOG)" && exit 1); \
+	fi
 
-# ─── House Concierge agent demo ───────────────────────────────────────────────
+demo-deploy:
+	@echo "→ Deploying the one demo world to $(DEMO_RPC) (log: $(DEMO_DEPLOY_LOG))"
+	@CODE=$$(cast code $(CREATE2_ADDR) --rpc-url $(DEMO_RPC) 2>/dev/null || echo 0x); \
+	 if [ "$$CODE" = "0x" ] || [ -z "$$CODE" ]; then \
+	   cast rpc anvil_setCode $(CREATE2_ADDR) $(CREATE2_CODE) --rpc-url $(DEMO_RPC) > /dev/null 2>&1 \
+	     && echo "  · CREATE2 deployer re-etched"; \
+	 fi
+	@cd contracts && forge script script/DeployAll.s.sol --rpc-url $(DEMO_RPC) --broadcast \
+	  > $(DEMO_DEPLOY_LOG) 2>&1 \
+	  && echo "✓ World deployed — apps/web/demo-addresses.json written" \
+	  || (echo "✗ Deploy failed — check $(DEMO_DEPLOY_LOG)" && tail -20 $(DEMO_DEPLOY_LOG) && exit 1)
 
-concierge-demo:
-	@cd apps/concierge && npm install --no-fund --no-audit && npm start
+demo-web:
+	@echo "→ Starting the site on :$(WEB_PORT) with DEMO_MODE=true (log: $(DEMO_WEB_LOG))"
+	@lsof -ti:$(WEB_PORT) -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
+	@pkill -f "[n]ext dev -p $(WEB_PORT)" 2>/dev/null || true
+	@sleep 1
+	@cd apps/web && RPC_URL=$(DEMO_RPC) WEB_PORT=$(WEB_PORT) npm run demo > $(DEMO_WEB_LOG) 2>&1 &
+	@for i in $$(seq 1 40); do sleep 1; curl -sf -m 2 $(DEMO_URL) > /dev/null 2>&1 && break; done
+	@curl -sf -m 5 $(DEMO_URL) > /dev/null 2>&1 \
+	  && echo "✓ Site up on $(DEMO_URL)" \
+	  || (echo "✗ Site failed to start — check $(DEMO_WEB_LOG)" && exit 1)
+
+# Stops only what `make demo` started.
+#
+# The site is always ours, so it goes by port: `-sTCP:LISTEN` keeps the kill to
+# the server rather than anything merely *connected* to it, and the pkill catches
+# the npm wrapper the port lookup can miss (`[n]` stops pkill matching its own
+# shell). The chain is different — `demo-chain` may have reused an anvil started
+# by `make up`, another worktree, or a human — so it is killed by the pid stamp
+# only, never by port and never by name.
+demo-stop:
+	@echo "→ Stopping the demo (:$(WEB_PORT), :$(RPC_PORT))..."
+	@lsof -ti:$(WEB_PORT) -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
+	@pkill -f "[n]ext dev -p $(WEB_PORT)" 2>/dev/null || true
+	@echo "  · site on :$(WEB_PORT) stopped"
+	@if [ -f $(DEMO_ANVIL_PID) ]; then \
+	  PID=$$(cat $(DEMO_ANVIL_PID)); \
+	  if kill -0 $$PID 2>/dev/null; then \
+	    kill -9 $$PID 2>/dev/null; echo "  · anvil on :$(RPC_PORT) (pid $$PID) stopped"; \
+	  else \
+	    echo "  · anvil on :$(RPC_PORT) (pid $$PID) was already gone"; \
+	  fi; \
+	  rm -f $(DEMO_ANVIL_PID); \
+	else \
+	  echo "  · anvil on :$(RPC_PORT) was not started by make demo — left running"; \
+	fi
+	@echo "✓ Demo stopped"
+
+# ─── Block explorer for the demo chain ────────────────────────────────────────
+# Points at $(RPC_PORT), so it follows `make demo RPC_PORT=…` to whichever chain
+# the demo is actually on. ERIGON_URL is fetched by the Otterscan frontend in
+# YOUR browser, not from inside the container — so it must be an address the
+# browser can resolve (127.0.0.1), never host.docker.internal.
+#
+# Set EXPLORER_URL=http://localhost:5100 when starting the demo to make every
+# tx hash in the app link here.
+
+demo-explorer:
+	@echo "Otterscan explorer for the demo chain on :$(RPC_PORT) → http://localhost:5100"
+	@docker run --rm -p 5100:80 \
+	  -e ERIGON_URL=http://127.0.0.1:$(RPC_PORT) otterscan/otterscan:latest

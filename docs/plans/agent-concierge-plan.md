@@ -1,5 +1,12 @@
 # House Concierge Agent Implementation Plan
 
+> **HISTORICAL — completed, then superseded.** The contracts this plan specifies are live
+> and unchanged. Its *runtime* is not: `apps/concierge/` and `apps/hook-demo/` were folded
+> into `apps/web` as the `/concierge` and `/markets` routes and deleted by
+> `docs/plans/unified-demo-plan.md`. Every `apps/concierge/…` path, port and `make` target
+> below is a record of how it was built, not of where it lives. Current state:
+> `docs/specs/agent-concierge-spec.md`; to run it, `make demo`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** An AI concierge for a house whose spending authority derives from its owners' live compliance passports — routine expenses paid autonomously from a token budget through a hook-gated Uniswap v4 pool, larger expenses via an m-of-n owner approval queue.
