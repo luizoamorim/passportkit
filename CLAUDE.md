@@ -25,10 +25,7 @@ An Identity is not only for a person. A person can spawn an **x402 agent** that 
 
 ## Conventions
 - Solidity `^0.8.24` (solc 0.8.24), **Apache-2.0**, OpenZeppelin v5 (`@openzeppelin/contracts/...`), forge-std. **ASCII-only in string literals** (solc rejects unicode).
-- Run tests skipping the legacy PassportCreds tests that don't compile:
-  ```
-  forge test --skip test/AccessGate.t.sol --skip test/CompliancePassport.t.sol --skip test/ClaimRegistry.t.sol --skip test/PassportCredsFlow.t.sol
-  ```
+- Run the contract tests with `forge test` (the legacy PassportCreds contracts + tests were removed).
 - Specs: `docs/specs/`. Vibe-coding prompts: `docs/prompts/`.
 
 ## Git workflow — IMPORTANT (multiple agents work this repo)
