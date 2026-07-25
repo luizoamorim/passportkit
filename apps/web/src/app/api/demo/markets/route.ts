@@ -16,14 +16,17 @@
  *
  * Demo-only: DEMO_MODE must be 'true' or every method here is a 403.
  */
-import { encodeAbiParameters, formatEther, pad, type Address, type Hex } from 'viem';
+import { encodeAbiParameters, formatEther, type Address, type Hex } from 'viem';
 
 import { LIQUIDITY_ROUTER_ABI, SWAP_ROUTER_ABI } from '@/lib/demo/abis';
 import {
+  MAX_SQRT_PRICE_MINUS_1,
+  MIN_SQRT_PRICE_PLUS_1,
   actorAddress,
   addresses,
   assertDemo,
   balancesOf,
+  chainNow,
   deltasBetween,
   demoDisabledResponse,
   demoEnabled,
@@ -32,12 +35,14 @@ import {
   jsonResponse,
   pools,
   refreshLogs,
+  saltOf,
   write,
   type DemoActor,
   type PoolName,
 } from '@/lib/demo/chain';
 import {
   CLAIM_TOPICS,
+  claimState,
   ensureIdentity,
   identityOf,
   isClaimName,
@@ -50,10 +55,6 @@ import { aggregateLiquidity } from '@/lib/demo/positions.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// v4 price bounds — a swap that names no limit of its own rides to the edge
-const MIN_SQRT_PRICE_PLUS_1 = 4295128740n;
-const MAX_SQRT_PRICE_MINUS_1 = 1461446703485210103287273052203988822378723970341n;
 
 /// Exact-input swap of 1 token (negative = "spend exactly this much").
 const SWAP_AMOUNT = -1_000000000000000000n;
@@ -70,8 +71,6 @@ const hookDataFor = (wallet: Address) => encodeAbiParameters([{ type: 'address' 
 const MARKET_POOLS: PoolName[] = ['deal', 'investor'];
 const isMarketPool = (name: unknown): name is PoolName =>
   typeof name === 'string' && (MARKET_POOLS as string[]).includes(name);
-
-const saltOf = (wallet: Address) => pad(wallet, { size: 32 }).toLowerCase();
 
 // ---------------------------------------------------------------- actions
 
@@ -115,8 +114,15 @@ async function doLiquidity(actor: DemoActor, poolName: PoolName, direction: 'add
 }
 
 /// "Verify" = mint the identity if needed, re-open the issuer latch if it was closed,
-/// sign the claim as the issuer, then submit it FROM THE HOLDER's wallet (Model B).
+/// and issue a claim only if the identity does not already hold a valid one.
 /// approved=false is the issuer refusing: it closes the latch instead.
+///
+/// The two halves are deliberately independent, because the demo tells two different
+/// stories with them. Re-opening the latch is usually the WHOLE fix — the signed claim
+/// never left the Identity, so the wallet clears the policy again in one transaction
+/// with nothing re-issued. An EXPIRED claim is the other case: after a timewarp the
+/// latch alone restores nothing, and only then does the issuer sign a fresh one. Always
+/// re-issuing would erase that distinction and no wallet could ever be seen EXPIRED.
 async function doVerify(actor: DemoActor, claim: ClaimName, approved: boolean) {
   const topic = CLAIM_TOPICS[claim];
   const { identity, txHashes } = await ensureIdentity(actor);
@@ -126,10 +132,13 @@ async function doVerify(actor: DemoActor, claim: ClaimName, approved: boolean) {
     return { ok: true, txHashes };
   }
 
-  // the latch blocks re-submission — issuer re-approval comes first
+  // the latch blocks re-submission too — issuer re-approval comes first
   if (await isRevoked(identity, topic)) txHashes.push(await setRevoked(identity, topic, false));
 
-  txHashes.push(await submitClaim(actor, identity, topic));
+  // per TOPIC, not per policy: 'accredited' must not be skipped just because the
+  // wallet already clears the KYC-only policy
+  const state = await claimState(identity, topic, await chainNow());
+  if (state.status !== 'VERIFIED') txHashes.push(await submitClaim(actor, identity, topic));
   return { ok: true, txHashes };
 }
 

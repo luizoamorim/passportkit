@@ -19,6 +19,7 @@ import {
   createWalletClient,
   formatEther,
   http as httpTransport,
+  pad,
   toHex,
   zeroAddress,
   type Address,
@@ -296,6 +297,14 @@ export function casaIsCurrency0(): boolean {
   const A = addresses();
   return A.casa.toLowerCase() < A.musd.toLowerCase();
 }
+
+// v4 price bounds (TickMath.{MIN,MAX}_SQRT_PRICE ± 1). A demo swap names no limit
+// of its own, so it rides to whichever edge its direction points at.
+export const MIN_SQRT_PRICE_PLUS_1 = 4295128740n;
+export const MAX_SQRT_PRICE_MINUS_1 = 1461446703485210103287273052203988822378723970341n;
+
+/// The salt a DemoPositionRouter position is keyed by: the owner's wallet, padded.
+export const saltOf = (wallet: Address): string => pad(wallet, { size: 32 }).toLowerCase();
 
 // ---------------------------------------------------------------- pool logs
 

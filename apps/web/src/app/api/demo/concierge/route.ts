@@ -21,6 +21,8 @@ import { encodeAbiParameters, formatEther, parseEther, type Address, type Hex } 
 
 import { ERC20_ABI, SWAP_ROUTER_ABI, TREASURY_ABI } from '@/lib/demo/abis';
 import {
+  MAX_SQRT_PRICE_MINUS_1,
+  MIN_SQRT_PRICE_PLUS_1,
   OWNERS,
   actorAddress,
   addresses,
@@ -49,10 +51,6 @@ import { settleInvoice } from '@/lib/demo/x402.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// v4 price bounds — the budget swap rides to the edge, the cap is the hook's job
-const MIN_SQRT_PRICE_PLUS_1 = 4295128740n;
-const MAX_SQRT_PRICE_MINUS_1 = 1461446703485210103287273052203988822378723970341n;
 
 /// What `grant-mandate` re-grants: the same terms DeployAll.s.sol set up.
 const MANDATE_CAP = parseEther('200');

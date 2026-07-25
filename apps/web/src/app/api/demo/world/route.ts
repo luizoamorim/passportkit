@@ -10,7 +10,7 @@
  *
  * Demo-only: DEMO_MODE must be 'true' or every method here is a 403.
  */
-import { formatEther, pad, type Address } from 'viem';
+import { formatEther, type Address } from 'viem';
 
 import { GATE_ABI, HOOK_ABI, TREASURY_ABI } from '@/lib/demo/abis';
 import {
@@ -34,6 +34,7 @@ import {
   readBalance,
   refreshLogs,
   resetWorld,
+  saltOf,
   timewarp,
   actorAddress,
   type DemoActor,
@@ -49,8 +50,6 @@ export const dynamic = 'force-dynamic';
 /// wallets by design — the agent's authority is the owners', never its own — and
 /// they surface under `agent` / `wallets` instead.
 const IDENTITY_ACTORS: DemoActor[] = ['operator', 'ana', 'rui'];
-
-const saltOf = (wallet: Address) => pad(wallet, { size: 32 }).toLowerCase();
 
 // ---------------------------------------------------------------- reads
 
