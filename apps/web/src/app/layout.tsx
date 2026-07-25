@@ -3,8 +3,8 @@ import './globals.css';
 import { PrivyAppProvider } from '@/providers/PrivyAppProvider';
 
 export const metadata: Metadata = {
-  title: 'PassportCreds by Node',
-  description: 'White-label Compliance Passport for regulated access.',
+  title: 'PassportKit Node',
+  description: 'Compliance credential rails for wallets, apps and agents.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

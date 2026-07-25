@@ -1,182 +1,108 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
-import { PrivyLoginButton } from '@/components/wallet/PrivyLoginButton';
-import { DealRoomLocked } from '@/components/deal-room/DealRoomLocked';
-import { DealRoomLimited } from '@/components/deal-room/DealRoomLimited';
-import { DealRoomUnlocked } from '@/components/deal-room/DealRoomUnlocked';
-import { DealRoomBlocked } from '@/components/deal-room/DealRoomBlocked';
-import { getPassportState } from '@/modules/passport/passport.service';
-import type { PassportState } from '@/modules/passport/passport.types';
-import { PRODUCT_NAME } from '@/modules/passport/passport.constants';
-import { shortenAddress } from '@/lib/format';
-
-const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+import { Shell, Card, Pill, Btn } from '@/components/pk/kit';
+import { useWallet } from '@/lib/useWallet';
+import { getState, type PassportState } from '@/lib/passportkit';
 
 export default function DealRoomPage() {
-  const router = useRouter();
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [walletProvider, setWalletProvider] = useState<'privy' | 'metamask'>('privy');
-  const [passport, setPassport] = useState<PassportState | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { wallet } = useWallet();
+  const [state, setState] = useState<PassportState | null>(null);
 
-  const fetchPassport = useCallback(async (addr: string) => {
-    setLoading(true);
-    try {
-      const state = await getPassportState(addr);
-      setPassport(state);
-    } catch {
-      setPassport(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleWalletReady = useCallback(
-    async (address: string, provider: 'privy' | 'metamask' = 'privy') => {
-      setWalletAddress(address);
-      setWalletProvider(provider);
-      await fetchPassport(address);
-    },
-    [fetchPassport],
-  );
-
-  const handlePrivyWalletReady = useCallback(
-    (addr: string) => handleWalletReady(addr, 'privy'),
-    [handleWalletReady],
-  );
-  const handleMetaMaskWalletReady = useCallback(
-    (addr: string) => handleWalletReady(addr, 'metamask'),
-    [handleWalletReady],
-  );
-
-  function handleDisconnect() {
-    setWalletAddress(null);
-    setPassport(null);
-    router.push('/');
-  }
-
+  const refresh = useCallback(async (w: string) => setState(await getState(w)), []);
   useEffect(() => {
-    if (walletAddress && passport?.claims.some((c) => c.status === 'PENDING' || c.status === 'PROCESSING')) {
-      const t = setInterval(() => fetchPassport(walletAddress), 3000);
-      return () => clearInterval(t);
-    }
-  }, [walletAddress, passport, fetchPassport]);
+    if (wallet) refresh(wallet);
+    else setState(null);
+  }, [wallet, refresh]);
 
-  function renderDealRoom() {
-    if (!walletAddress) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-6">
-          <p className="text-4xl mb-4">🔒</p>
-          <h2 className="text-2xl font-bold text-white mb-2">Login to continue.</h2>
-          <p className="text-[#8FA0C0] mb-6 max-w-sm">
-            Login with your email to access this Deal Room.
-          </p>
-          <div className="flex flex-wrap gap-3 justify-center">
-            {HAS_PRIVY ? (
-              <PrivyLoginButton onWalletReady={handlePrivyWalletReady} address={null} />
-            ) : (
-              <ConnectWalletButton onConnect={handleMetaMaskWalletReady} address={null} />
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center min-h-[400px] text-[#8FA0C0] text-sm">
-          Loading passport...
-        </div>
-      );
-    }
-
-    if (!passport || passport.status === 'NONE') {
-      return <DealRoomLocked />;
-    }
-
-    if (passport.status === 'RED' || passport.status === 'REVOKED') {
-      return <DealRoomBlocked />;
-    }
-
-    if (passport.canAccessDealRoom && passport.status === 'GREEN') {
-      return <DealRoomUnlocked />;
-    }
-
-    if (passport.canAccessDealRoom && passport.status === 'LIMITED') {
-      return <DealRoomLimited />;
-    }
-
-    return <DealRoomLocked />;
-  }
+  const dealOk = !!state?.dealRoom.ok;
+  const investorOk = !!state?.investor.ok;
 
   return (
-    <div className="min-h-screen bg-[#0D1428]">
-      {/* Header */}
-      <header className="border-b border-[#1E2D4D]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4A9EFF] to-[#3DDBD9] flex items-center justify-center">
-              <span className="text-white text-xs font-bold">PC</span>
-            </div>
-            <span className="font-bold text-white text-sm">{PRODUCT_NAME}</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            {walletAddress && (
-              <span className="text-xs font-mono text-[#8FA0C0]">{shortenAddress(walletAddress)}</span>
-            )}
-            {!walletAddress && (
-              HAS_PRIVY
-                ? <PrivyLoginButton onWalletReady={handlePrivyWalletReady} address={null} />
-                : <ConnectWalletButton onConnect={handleMetaMaskWalletReady} address={null} />
-            )}
-            <Link
-              href="/passport"
-              className="text-sm font-semibold text-[#4A9EFF] hover:text-[#2B7FE0] transition-colors"
-            >
-              ← Passport
-            </Link>
-          </div>
-        </div>
-      </header>
+    <Shell>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-[#0D1428]">Node PropTech Deal Room</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Access is gated live by the same EligibilityGate. Revoke a claim and this locks instantly.
+        </p>
+      </div>
 
-      {/* Passport status bar */}
-      {passport && walletAddress && (
-        <div className="border-b border-[#1E2D4D] bg-[#141E38]">
-          <div className="max-w-6xl mx-auto px-6 py-2 flex items-center gap-4">
-            <span className="text-[10px] font-semibold tracking-widest uppercase text-[#8FA0C0]">
-              Passport Status
-            </span>
-            <span
-              className={`text-xs font-bold ${
-                passport.status === 'GREEN'
-                  ? 'text-[#3DDBD9]'
-                  : passport.status === 'LIMITED'
-                  ? 'text-[#4A9EFF]'
-                  : passport.status === 'RED'
-                  ? 'text-red-400'
-                  : 'text-[#8FA0C0]'
-              }`}
-            >
-              {passport.status}
-            </span>
-            <span className="text-[#1E2D4D]">·</span>
-            <span className="text-[10px] text-[#8FA0C0]">
-              KYC/AML: {passport.claims.find((c) => c.claimType === 'KYC_AML_VERIFIED')?.status ?? 'UNVERIFIED'}
-            </span>
-            <span className="text-[#1E2D4D]">·</span>
-            <span className="text-[10px] text-[#8FA0C0]">
-              Accredited: {passport.claims.find((c) => c.claimType === 'ACCREDITED_INVESTOR')?.status ?? 'UNVERIFIED'}
-            </span>
-          </div>
-        </div>
+      {(!wallet || !state?.identity) && (
+        <LockedBanner
+          title="Locked"
+          reason="Connect a wallet and create your identity to request access."
+          cta
+        />
       )}
 
-      {/* Main content */}
-      <main className="max-w-3xl mx-auto px-6 py-12">{renderDealRoom()}</main>
+      {wallet && state?.identity && !dealOk && (
+        <LockedBanner title="Locked" reason={`Deal Room needs KYC — gate says ${state.dealRoom.reason}.`} cta />
+      )}
+
+      {wallet && state?.identity && dealOk && (
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+            <div className="flex items-center gap-2">
+              <Pill tone="green">✓ Deal Room unlocked</Pill>
+              <span className="text-xs text-slate-500">policy #1 satisfied (KYC)</span>
+            </div>
+            <p className="mt-3 text-sm text-teal-800">
+              Welcome. You can browse deals, data rooms, and documents.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {['Blue Tower · Lisbon', 'Riverside Lofts', 'Harbor Logistics'].map((d) => (
+              <Card key={d} title={d} subtitle="PropTech deal">
+                <div className="h-16 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200" />
+                <p className="mt-3 text-xs text-slate-500">Target IRR 14% · Data room available</p>
+              </Card>
+            ))}
+          </div>
+
+          <Card
+            title="Investor area"
+            subtitle="Restricted to accredited investors (policy #2)."
+            className={investorOk ? 'ring-1 ring-teal-200' : ''}
+          >
+            {investorOk ? (
+              <div>
+                <Pill tone="green">✓ investor access</Pill>
+                <p className="mt-3 text-sm text-slate-600">
+                  Subscribe, commit capital, and view the cap table.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <Pill tone="amber">limited</Pill>
+                <p className="mt-3 text-sm text-slate-600">
+                  You can browse, but investing needs the Accredited Investor claim ·{' '}
+                  <span className="font-mono text-xs">{state.investor.reason}</span>.
+                </p>
+                <Link href="/passport" className="mt-2 inline-block text-xs font-semibold text-[#4A9EFF] hover:underline">
+                  Get accredited on My Passport →
+                </Link>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+    </Shell>
+  );
+}
+
+function LockedBanner({ title, reason, cta }: { title: string; reason: string; cta?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
+      <div className="text-3xl">🔒</div>
+      <h2 className="mt-2 text-lg font-bold text-red-700">{title}</h2>
+      <p className="mt-1 text-sm text-red-600">{reason}</p>
+      {cta && (
+        <Link href="/passport" className="mt-4 inline-block">
+          <Btn>Go to My Passport</Btn>
+        </Link>
+      )}
     </div>
   );
 }
