@@ -2,9 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
-// The x402 vendor is still the standalone concierge app's; Task 4 ports it to
-// apps/web/src/app/api/demo/vendor/invoice/route.ts and this import moves with it.
-import { createVendorServer } from '../../../concierge/vendor/server.js';
 import { settleInvoice } from '../../src/lib/demo/x402.js';
 
 const VENDOR_ADDRESS = '0x90F79bf6EB2c4f870365E785982E1f101E93b906'; // test vendor payout address
@@ -16,17 +13,59 @@ const AMOUNT = '1000000000000000000'; // 1 mUSD, 18 decimals, wei string
 // the payout wallet it is willing to pay.
 const EXPECTED = { asset: TOKEN_ADDRESS, payTo: VENDOR_ADDRESS };
 
-// Starts createVendorServer on an ephemeral port with the given stubbed
-// verifier and waits for it to actually be listening before handing back
-// its base URL, so callers never race the bind.
+// A FAKE x402 vendor — just enough of the protocol for these tests, and nothing
+// else. The unit under test is the CLIENT (settleInvoice), so the counterparty is
+// a stub the test owns: no chain, no RPC, and no reach into another app for a
+// production server. `verify(txHash, amount)` is injected — true means the payment
+// landed, false means it did not.
+//
+// Contract: POST /invoice with no X-PAYMENT gets the 402 challenge; with a parseable
+// X-PAYMENT it gets 200 {paid, jobId} when `verify` accepts and the 402 challenge
+// again when it does not; everything else is a plain 404 JSON.
+//
+// Listens on an ephemeral port and waits for the bind, so callers never race it.
 async function startVendor(verify) {
-  const server = createVendorServer({
-    port: 0,
-    vendorAddress: VENDOR_ADDRESS,
-    tokenAddress: TOKEN_ADDRESS,
-    rpcUrl: 'http://127.0.0.1:8545',
-    verify,
+  const sendJson = (res, status, body) => {
+    res.writeHead(status, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(body));
+  };
+  const challenge = (res, amount) =>
+    sendJson(res, 402, {
+      x402Version: 1,
+      accepts: [
+        { scheme: 'exact', network: 'eip155-local', asset: TOKEN_ADDRESS, amount, payTo: VENDOR_ADDRESS },
+      ],
+    });
+
+  const server = http.createServer(async (req, res) => {
+    if (req.method !== 'POST' || req.url !== '/invoice') {
+      sendJson(res, 404, { error: 'not found' });
+      return;
+    }
+
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    const { jobId, amount } = raw ? JSON.parse(raw) : {};
+
+    const paymentHeader = req.headers['x-payment'];
+    if (!paymentHeader) {
+      challenge(res, amount);
+      return;
+    }
+
+    let txHash;
+    try {
+      ({ txHash } = JSON.parse(paymentHeader));
+    } catch {
+      challenge(res, amount);
+      return;
+    }
+
+    if (await verify(txHash, amount)) sendJson(res, 200, { paid: true, jobId });
+    else challenge(res, amount);
   });
+
+  server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const { port } = server.address();
   return { server, vendorUrl: `http://127.0.0.1:${port}` };
