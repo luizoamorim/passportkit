@@ -21,7 +21,7 @@ import { foundry, sepolia } from 'viem/chains';
 
 import { decodeRefusal } from './lib/decode.js';
 import { makeDecider } from './lib/deciders.js';
-import { makeFixtureClient, makeGraphClient } from './lib/graph.js';
+import { makeFixtureClient, makeGraphClient, redactGatewayUrl } from './lib/graph.js';
 import { askOfficer, makeNarrator, SUPPORTED_QUESTIONS } from './lib/officer.js';
 import { parseEnvFile } from './lib/env.js';
 import { evidenceHash } from './lib/evidence.js';
@@ -1036,7 +1036,8 @@ const server = http.createServer(async (req, res) => {
     } else if (req.method === 'GET' && url.pathname === '/api/officer/config') {
       json(res, 200, {
         live: Boolean(officerLive),
-        url: SUBGRAPH_URL,
+        // redacted: the legacy gateway URL form carries the API key in-path
+        url: SUBGRAPH_URL ? redactGatewayUrl(SUBGRAPH_URL) : null,
         narrator: OFFICER_NARRATOR,
         supported: SUPPORTED_QUESTIONS,
       });

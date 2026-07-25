@@ -8,6 +8,7 @@ import {
   expiringClaimsQuery,
   makeFixtureClient,
   makeGraphClient,
+  redactGatewayUrl,
 } from '../lib/graph.js';
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), '../lib/fixtures');
@@ -39,6 +40,36 @@ test('fixture_client_resolves_by_operation_name', async () => {
   const data = await client.run(expiringClaimsQuery(30, 1784937600));
   assert.ok(Array.isArray(data.claims));
   assert.equal(client.kind, 'fixture');
+});
+
+test('redact_gateway_url_strips_key_in_path', () => {
+  assert.equal(
+    redactGatewayUrl('https://gateway.thegraph.com/api/deadbeef1234/subgraphs/id/QmX'),
+    'https://gateway.thegraph.com/api/[redacted]/subgraphs/id/QmX',
+  );
+});
+
+test('redact_gateway_url_leaves_keyless_forms_alone', () => {
+  const headerForm = 'https://gateway.thegraph.com/api/subgraphs/id/QmX';
+  const studioForm = 'https://api.studio.thegraph.com/query/12345/passportkit-sepolia/v0.0.1';
+  assert.equal(redactGatewayUrl(headerForm), headerForm);
+  assert.equal(redactGatewayUrl(studioForm), studioForm);
+});
+
+test('live_client_displays_a_redacted_url_but_requests_the_real_one', async (t) => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, status: 200, json: async () => ({ data: { claims: [] } }) };
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const real = 'https://gateway.thegraph.com/api/secret-key/subgraphs/id/QmX';
+  const client = makeGraphClient({ url: real });
+  await client.run(expiringClaimsQuery(7, 0));
+  assert.equal(client.url, 'https://gateway.thegraph.com/api/[redacted]/subgraphs/id/QmX');
+  assert.equal(calls[0].url, real);
 });
 
 test('live_client_posts_query_with_bearer_key', async (t) => {

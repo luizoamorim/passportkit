@@ -44,6 +44,8 @@ export function expiringClaimsQuery(days, nowSec) {
 // "What is the blast radius if issuer X is revoked?" — every ACTIVE claim is
 // fetched (bounded) so the assembly can tell topics covered ONLY by X apart
 // from topics another trusted issuer also covers for the same identity.
+// Expiry is filtered in the assembly, not here: expiry fires no event (status
+// stays ACTIVE on-graph), and one JS-side filter covers live + fixture paths.
 export function blastRadiusQuery(issuer) {
   return {
     operation: 'BlastRadius',
@@ -106,12 +108,20 @@ export function auditTrailQuery(wallet) {
   };
 }
 
+// The legacy gateway URL form embeds the API key in the path
+// (…/api/<key>/subgraphs/id/…). Anything shown to a browser goes through this
+// so a pasted dashboard URL never leaks GRAPH_API_KEY into page HTML.
+export function redactGatewayUrl(url) {
+  return String(url ?? '').replace(/(\/api\/)([^/]+)(\/subgraphs)/, '$1[redacted]$3');
+}
+
 // Live gateway client. `url` is the Subgraph Studio dev URL or the gateway URL
 // (https://gateway.thegraph.com/api/subgraphs/id/… with GRAPH_API_KEY as bearer).
+// `client.url` is display-only and pre-redacted; requests use the real URL.
 export function makeGraphClient({ url, apiKey, timeoutMs = 15000 }) {
   return {
     kind: 'live',
-    url,
+    url: redactGatewayUrl(url),
     async run({ query, variables }) {
       const headers = { 'content-type': 'application/json' };
       if (apiKey) headers.authorization = `Bearer ${apiKey}`;
