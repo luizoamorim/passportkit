@@ -9,6 +9,42 @@
 > Status: designed 2026-07-25, not yet implemented. Companion analysis in
 > `ETHLisbon2026/FINAL/doc/` (outer prep repo).
 
+> **Status: implemented** (2026-07-25) — contracts in `contracts/src/agents/` +
+> `contracts/src/hooks/MandateHook.sol`, runtime and UI in `apps/concierge/`
+> (`make concierge-demo` → :4190, mock x402 vendor on :4191). 29 Solidity tests
+> (HouseToken 4 · HouseTreasury 18 · MandateHook 7) + 28 node:test. Deltas found
+> during implementation:
+>
+> - **Rail 1 uses exact-*output* swaps.** §4 says "swap CASA→mUSD"; an exact-input
+>   swap of `amount` CASA nets less than `amount` mUSD (0.3% pool fee) and cannot
+>   settle the invoice. The agent therefore asks for exactly the invoice in mUSD and
+>   spends slightly more CASA. Consequence for §3.3: the hook reads
+>   `|SwapParams.amountSpecified|`, so **`perTxCap` is enforced against the invoice
+>   value**, not the CASA spent — the intended semantics, but worth stating.
+> - **2% budget haircut in the decider context.** Because of the above, the runtime
+>   hands the decider `casaBalance * 0.98` as the available budget; otherwise a ticket
+>   sitting flush against the balance decides `pay` and then reverts on the swap with
+>   `ERC20InsufficientBalance`. Purely a runtime guard — no contract state involved.
+> - **Refusal-reason fallback from standing.** §3.2's rail-2 reverts are bare
+>   (`NotAgent()` carries no reason code), unlike the hook's
+>   `NotAuthorized(wallet, reason)`. The server falls back to
+>   `isAgentInGoodStanding` and reports that reason, so both rails name *why* the
+>   agent lost authority. Also: mandate legs are checked before owner legs, so a
+>   timewarp past expiry surfaces `MANDATE_EXPIRED` even though the owners' claims
+>   expired in the same jump.
+> - **Evidence is hashed everywhere, anchored on rail 2 only.** §5 implies every
+>   payment carries an `evidenceHash` on-chain; in practice only `proposePayment`
+>   stores one. Rail-1 decisions are hashed and surfaced in the UI but leave no
+>   on-chain evidence pointer — anchoring routine decisions is roadmap.
+> - **`DECIDER` adapter is env-selected** (`mock|openai|zerog`, default `mock`);
+>   `openai` falls back to the mock rules on any error or malformed response, and
+>   `zerog` is an event-time stub that throws with the exact broker SDK call sequence
+>   it will make. The `subgraph` ChainData adapter of §5 is not built — reads are
+>   direct RPC.
+> - **Single-owner grant simplification stands as specced** (§3.2): both
+>   `grantMandate` and `revokeMandate` are callable by any single owner; production
+>   would gate grants behind the m-of-n threshold.
+
 ## 1. Thesis
 
 Agents cannot KYC. Instead of pretending they can, the concierge's authority is a
