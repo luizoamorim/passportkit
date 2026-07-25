@@ -31,8 +31,10 @@ contract EligibilityGate is AccessControl {
     event PolicySet(uint256 indexed policyId, uint256[] topics);
 
     error ZeroIssuerRegistry();
+    error ZeroAdmin();
 
     constructor(address admin, address issuerRegistry) {
+        if (admin == address(0)) revert ZeroAdmin();
         if (issuerRegistry == address(0)) revert ZeroIssuerRegistry();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         issuers = IIssuerRegistry(issuerRegistry);
@@ -73,6 +75,6 @@ contract EligibilityGate is AccessControl {
         if (topic == ClaimTopics.KYC_VERIFIED)        return Reason.MISSING_KYC;
         if (topic == ClaimTopics.PROOF_OF_PERSONHOOD) return Reason.MISSING_PERSONHOOD;
         if (topic == ClaimTopics.ACCREDITED_INVESTOR) return Reason.MISSING_ACCREDITED;
-        return "MISSING_CLAIM";
+        return Reason.MISSING_CLAIM;
     }
 }

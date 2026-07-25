@@ -18,7 +18,10 @@ contract IssuerRegistry is AccessControl {
 
     event TrustedSet(address indexed issuer, uint256 indexed topic, bool ok);
 
+    error ZeroAdmin();
+
     constructor(address admin) {
+        if (admin == address(0)) revert ZeroAdmin();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 

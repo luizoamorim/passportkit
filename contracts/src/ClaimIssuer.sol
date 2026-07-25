@@ -36,7 +36,10 @@ contract ClaimIssuer is IClaimIssuer, AccessControl, EIP712 {
     event SignerSet(address indexed signer, bool ok);
     event RevocationSet(address indexed identity, uint256 indexed topic, bool revoked);
 
+    error ZeroAdmin();
+
     constructor(address admin, address signer) EIP712("PassportKitClaim", "1") {
+        if (admin == address(0)) revert ZeroAdmin();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(AGENT_ROLE, admin);
         if (signer != address(0)) { isAuthorizedSigner[signer] = true; emit SignerSet(signer, true); }

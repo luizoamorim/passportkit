@@ -20,7 +20,12 @@ contract IdentityFactory is AccessControl {
 
     event IdentityCreated(address indexed wallet, address indexed identity);
 
+    error ZeroAdmin();
+    error ZeroIssuerRegistry();
+
     constructor(address admin, address issuerRegistry_) {
+        if (admin == address(0)) revert ZeroAdmin();
+        if (issuerRegistry_ == address(0)) revert ZeroIssuerRegistry();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(AGENT_ROLE, admin);
         issuerRegistry = issuerRegistry_;
