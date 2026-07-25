@@ -7,23 +7,36 @@ import {IPoolManager, SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 
-import {IAccessGate} from "../interfaces/IAccessGate.sol";
-import {IClaimRegistry} from "../interfaces/IClaimRegistry.sol";
-import {ICompliancePassport} from "../interfaces/ICompliancePassport.sol";
+import {Reason} from "../libraries/Types.sol";
+
+/// Minimal view of the decision core — the hook adds zero eligibility logic of its own.
+interface IEligibilityGate {
+    function isEligible(address identity, uint256 policyId) external view returns (bool ok, bytes32 reason);
+}
+
+/// Minimal view of the IdentityFactory: wallet (person OR agent) -> Identity contract.
+interface IIdentityResolver {
+    function identityOfWallet(address wallet) external view returns (address);
+}
 
 /**
  * @title ComplianceHook
  * @notice Uniswap v4 hook that turns a pool into a compliance-gated venue.
  *
- * Surface #4 of PassportCreds: the same AccessGate that guards the Deal Room guards
- * the pool. Swaps and liquidity additions are only allowed for wallets that pass the
- * configured policy; removing liquidity is deliberately ungated — funds are never
- * trapped when compliance lapses.
+ * Surface #4 of PassportKit: the same EligibilityGate that guards the token, the ENS
+ * name and the Deal Room guards the pool. Swaps and liquidity additions are only
+ * allowed for wallets whose identity satisfies this pool's `policyId`; removing
+ * liquidity is deliberately ungated — funds are never trapped when compliance lapses.
  *
- * Decision vs. diagnosis:
- *   - The AccessGate boolean is the only access decision (zero new eligibility logic).
- *   - reasonFor() derives a human-readable reason code from ClaimRegistry and
- *     CompliancePassport purely for the revert / UI. Advisory only.
+ * Decision AND diagnosis come from the gate:
+ *   - `isEligible(identity, policyId)` is the only access decision (no local rules).
+ *   - the `reason` it returns (MISSING_KYC, MISSING_ACCREDITED, NO_POLICY, …) is what
+ *     the revert carries, so the pool never disagrees with the rest of the system.
+ *   - the one code the hook owns is NO_IDENTITY, for a wallet the resolver doesn't know.
+ *
+ * A pool's policy is just the immutable `policyId`; which topics that requires lives in
+ * the gate (`EligibilityGate.setPolicy`). Repo-wide: policy 1 = Deal Room (KYC),
+ * policy 2 = Investor (KYC + accredited).
  *
  * Actor resolution: v4 passes the router as `sender`, so the trading wallet arrives
  * as a 32-byte address in hookData. Empty hookData falls back to `sender`.
@@ -31,35 +44,21 @@ import {ICompliancePassport} from "../interfaces/ICompliancePassport.sol";
  * Roadmap: bind the actor by signature or restrict to an allowlisted router.
  */
 contract ComplianceHook is BaseHook {
-    /// Which AccessGate question this pool asks.
-    ///   DEAL_ROOM     — canAccessDealRoom: valid KYC/AML claim + LIMITED or GREEN passport.
-    ///   INVESTOR_AREA — canAccessInvestorArea: both claims valid + GREEN passport.
-    enum Policy {
-        DEAL_ROOM,
-        INVESTOR_AREA
-    }
-
     error NotCompliant(address wallet, bytes32 reasonCode);
 
-    IAccessGate public immutable ACCESS_GATE;
-    IClaimRegistry public immutable CLAIM_REGISTRY;
-    ICompliancePassport public immutable COMPLIANCE_PASSPORT;
-    Policy public immutable POLICY;
-
-    bytes32 private constant KYC_AML_VERIFIED = keccak256("KYC_AML_VERIFIED");
-    bytes32 private constant ACCREDITED_INVESTOR = keccak256("ACCREDITED_INVESTOR");
+    IEligibilityGate public immutable gate;
+    IIdentityResolver public immutable resolver; // wallet -> identity
+    uint256 public immutable policyId;
 
     constructor(
         IPoolManager poolManager,
-        IAccessGate accessGate,
-        IClaimRegistry claimRegistry,
-        ICompliancePassport compliancePassport,
-        Policy policy
+        IEligibilityGate gate_,
+        IIdentityResolver resolver_,
+        uint256 policyId_
     ) BaseHook(poolManager) {
-        ACCESS_GATE = accessGate;
-        CLAIM_REGISTRY = claimRegistry;
-        COMPLIANCE_PASSPORT = compliancePassport;
-        POLICY = policy;
+        gate = gate_;
+        resolver = resolver_;
+        policyId = policyId_;
     }
 
     /**
@@ -106,52 +105,25 @@ contract ComplianceHook is BaseHook {
     }
 
     /**
-     * @notice Advisory diagnosis of why a wallet fails this pool's policy.
-     * @return reasonCode bytes32 short string, or bytes32(0) when compliant.
+     * @notice Why a wallet fails this pool's policy — the exact code its revert carries.
+     * @return reasonCode the gate's own reason code, NO_IDENTITY for an unknown wallet,
+     *         or bytes32(0) when the wallet is compliant.
      */
     function reasonFor(address wallet) public view returns (bytes32) {
-        if (_allowed(wallet)) return bytes32(0);
-
-        if (COMPLIANCE_PASSPORT.statusOf(wallet) == ICompliancePassport.PassportStatus.REVOKED) {
-            return "PASSPORT_REVOKED";
-        }
-
-        IClaimRegistry.Claim memory kyc = CLAIM_REGISTRY.getClaim(wallet, KYC_AML_VERIFIED);
-        if (
-            kyc.status == IClaimRegistry.ClaimStatus.FAILED
-                || kyc.status == IClaimRegistry.ClaimStatus.REVOKED
-        ) {
-            return "KYC_FAILED";
-        }
-        if (!CLAIM_REGISTRY.hasValidClaim(wallet, KYC_AML_VERIFIED)) {
-            return kyc.status == IClaimRegistry.ClaimStatus.VERIFIED
-                ? bytes32("KYC_EXPIRED")
-                : bytes32("KYC_MISSING");
-        }
-
-        if (POLICY == Policy.INVESTOR_AREA) {
-            IClaimRegistry.Claim memory accredited = CLAIM_REGISTRY.getClaim(wallet, ACCREDITED_INVESTOR);
-            if (!CLAIM_REGISTRY.hasValidClaim(wallet, ACCREDITED_INVESTOR)) {
-                return accredited.status == IClaimRegistry.ClaimStatus.VERIFIED
-                    ? bytes32("ACCREDITATION_EXPIRED")
-                    : bytes32("ACCREDITATION_MISSING");
-            }
-        }
-
-        // Valid claims but the stored passport status lags behind (no syncPassport yet)
-        return "PASSPORT_OUT_OF_SYNC";
+        address identity = resolver.identityOfWallet(wallet);
+        if (identity == address(0)) return Reason.NO_IDENTITY;
+        (, bytes32 reason) = gate.isEligible(identity, policyId);
+        return reason;
     }
 
     // --- Internal ---
 
+    /// @dev Mirrors reasonFor() with a single gate call — same decision, same code.
     function _requireCompliant(address wallet) internal view {
-        if (!_allowed(wallet)) revert NotCompliant(wallet, reasonFor(wallet));
-    }
-
-    function _allowed(address wallet) internal view returns (bool) {
-        return POLICY == Policy.DEAL_ROOM
-            ? ACCESS_GATE.canAccessDealRoom(wallet)
-            : ACCESS_GATE.canAccessInvestorArea(wallet);
+        address identity = resolver.identityOfWallet(wallet);
+        if (identity == address(0)) revert NotCompliant(wallet, Reason.NO_IDENTITY);
+        (bool ok, bytes32 reason) = gate.isEligible(identity, policyId);
+        if (!ok) revert NotCompliant(wallet, reason);
     }
 
     function _actor(address sender, bytes calldata hookData) internal pure returns (address) {
