@@ -1,0 +1,14 @@
+{
+  "_comment": "Fallback only — scripts/prepare.js prefers contracts/deployments/11155111.json (written by DeployPassportKit.s.sol). Zeros mean the Sepolia deploy has not landed yet.",
+  "network": "sepolia",
+  "chainId": 11155111,
+  "startBlock": 0,
+  "IdentityFactory": "0x0000000000000000000000000000000000000000",
+  "ClaimIssuer": "0x0000000000000000000000000000000000000000",
+  "IssuerRegistry": "0x0000000000000000000000000000000000000000",
+  "EligibilityGate": "0x0000000000000000000000000000000000000000",
+  "GatedERC20": "0x0000000000000000000000000000000000000000",
+  "ScoreRegistry": "0x0000000000000000000000000000000000000000",
+  "PassportSubnameRegistrar": "0x0000000000000000000000000000000000000000",
+  "PassportResolver": "0x0000000000000000000000000000000000000000"
+}
