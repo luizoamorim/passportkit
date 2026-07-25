@@ -640,12 +640,17 @@ function swapForInvoice(amountWei) {
   ]);
 }
 
-// Rail 1, step 2: settle the vendor's x402 invoice from the agent wallet.
+// Rail 1, step 2: settle the vendor's x402 invoice from the agent wallet. The
+// vendor names the recipient and the sum in its own 402 body, so `expected`
+// hands the client the two facts we know without asking it — the mUSD address
+// and the plumber's payout wallet — and the invoice amount is checked against
+// the ticket. A vendor that offers anything else gets nothing.
 function payInvoice(id, amountWei) {
   return settleInvoice({
     vendorUrl: VENDOR_URL,
     jobId: id,
     amount: amountWei.toString(),
+    expected: { asset: A.musd, payTo: actorAddress.plumber },
     payFn: (accept) => write('concierge', A.musd, ERC20_ABI, 'transfer', [accept.payTo, BigInt(accept.amount)]),
   });
 }
