@@ -14,20 +14,33 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
-import {ClaimRegistry} from "../../src/ClaimRegistry.sol";
-import {CompliancePassport} from "../../src/CompliancePassport.sol";
-import {AccessGate} from "../../src/AccessGate.sol";
-import {IAccessGate} from "../../src/interfaces/IAccessGate.sol";
-import {HouseTreasury} from "../../src/agents/HouseTreasury.sol";
+import {IssuerRegistry} from "../../src/IssuerRegistry.sol";
+import {ClaimIssuer} from "../../src/ClaimIssuer.sol";
+import {IdentityFactory} from "../../src/IdentityFactory.sol";
+import {Identity} from "../../src/Identity.sol";
+import {EligibilityGate} from "../../src/EligibilityGate.sol";
+import {ClaimTopics} from "../../src/libraries/Types.sol";
+import {HouseTreasury, IEligibilityGate, IIdentityResolver} from "../../src/agents/HouseTreasury.sol";
 import {MandateHook} from "../../src/hooks/MandateHook.sol";
 import {DemoPositionRouter} from "../../src/demo/DemoPositionRouter.sol";
 
+/**
+ * MandateHook against the REAL PassportKit stack behind the treasury — the hook itself
+ * is unchanged (it reads HouseTreasury through IHouseTreasuryStanding), so these tests
+ * prove the new eligibility wiring reaches the pool untouched.
+ *
+ * ⚠ forge 1.7.1: never put an external call between `vm.expectRevert` and the guarded
+ *   call — the cheatcode binds to the FIRST call that follows it.
+ */
 contract MandateHookTest is Test {
     uint160 constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
 
-    ClaimRegistry registry;
-    CompliancePassport passport;
-    AccessGate gate;
+    uint256 constant POLICY_DEAL_ROOM = 1; // [KYC_VERIFIED]
+
+    IssuerRegistry issuerRegistry;
+    ClaimIssuer issuer;
+    IdentityFactory factory;
+    EligibilityGate gate;
     HouseTreasury treasury;
     MockERC20 musd;
 
@@ -39,33 +52,53 @@ contract MandateHookTest is Test {
     bool casaIsToken0;
 
     address admin = makeAddr("admin");
-    address updater = makeAddr("updater");
+    uint256 signerPk = uint256(keccak256("issuer-signer"));
+    address signer;
     address ownerA = makeAddr("ownerA");
     address ownerB = makeAddr("ownerB");
     address concierge = makeAddr("concierge");
     address stranger = makeAddr("stranger");
 
-    bytes32 constant KYC = keccak256("KYC_AML_VERIFIED");
+    uint256 KYC = ClaimTopics.KYC_VERIFIED;
     uint64 FUTURE;
     uint256 nonce;
 
     function setUp() public {
         FUTURE = uint64(block.timestamp + 365 days);
-        registry = new ClaimRegistry(admin);
-        passport = new CompliancePassport(admin, address(registry));
-        gate = new AccessGate(address(registry), address(passport));
+        signer = vm.addr(signerPk);
+
+        // --- PassportKit stack (the real contracts) ---
+        issuerRegistry = new IssuerRegistry(admin);
+        issuer = new ClaimIssuer(admin, signer);
+        factory = new IdentityFactory(admin, address(issuerRegistry));
+        gate = new EligibilityGate(admin, address(issuerRegistry));
+
         vm.startPrank(admin);
-        registry.grantRole(registry.CRE_UPDATER_ROLE(), updater);
-        passport.grantRole(passport.CRE_UPDATER_ROLE(), updater);
+        issuerRegistry.setTrusted(address(issuer), KYC, true);
+        uint256[] memory dealTopics = new uint256[](1);
+        dealTopics[0] = KYC;
+        gate.setPolicy(POLICY_DEAL_ROOM, dealTopics);
         vm.stopPrank();
-        _verifyKyc(ownerA);
-        _verifyKyc(ownerB);
+
+        _onboard(ownerA);
+        _onboard(ownerB);
+        _issue(ownerA, KYC, FUTURE);
+        _issue(ownerB, KYC, FUTURE);
 
         musd = new MockERC20("Mock USD", "mUSD", 18);
         address[] memory owners = new address[](2);
         owners[0] = ownerA;
         owners[1] = ownerB;
-        treasury = new HouseTreasury(owners, 2, IERC20(address(musd)), IAccessGate(address(gate)), "Casa", "CASA");
+        treasury = new HouseTreasury(
+            owners,
+            2,
+            IERC20(address(musd)),
+            IEligibilityGate(address(gate)),
+            IIdentityResolver(address(factory)),
+            POLICY_DEAL_ROOM,
+            "Casa",
+            "CASA"
+        );
         vm.prank(ownerA);
         treasury.grantMandate(concierge, 100 ether, FUTURE);
         vm.prank(ownerA);
@@ -109,11 +142,54 @@ contract MandateHookTest is Test {
         vm.stopPrank();
     }
 
-    function _verifyKyc(address user) internal {
-        vm.startPrank(updater);
-        registry.submitClaim(user, KYC, true, keccak256(abi.encode(nonce++)), keccak256("attest"), FUTURE);
-        passport.syncPassport(user);
-        vm.stopPrank();
+    // --- helpers ---
+
+    /// One Identity per wallet, minted by the backend role (AGENT_ROLE = admin here).
+    function _onboard(address wallet) internal returns (address identity) {
+        vm.prank(admin);
+        identity = factory.createIdentity(wallet);
+    }
+
+    /// Model B: the issuer SIGNS off-chain (EIP-712), the holder submits from their own wallet.
+    function _issue(address wallet, uint256 topic, uint64 expiresAt) internal {
+        address identity = factory.identityOfWallet(wallet);
+        bytes32 dataHash = keccak256(abi.encode("sanitized-result", nonce));
+        bytes32 claimNonce = keccak256(abi.encode("session", nonce++));
+        bytes memory data = abi.encode(dataHash, expiresAt, claimNonce);
+        bytes memory sig = _sign(identity, topic, dataHash, expiresAt, claimNonce);
+
+        vm.prank(wallet);
+        Identity(identity).submitClaim(topic, address(issuer), sig, data);
+    }
+
+    function _sign(address identity, uint256 topic, bytes32 dataHash, uint64 expiresAt, bytes32 claimNonce)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 typeHash = keccak256(
+            "Claim(address identity,uint256 topic,bytes32 dataHash,uint64 expiresAt,bytes32 nonce)"
+        );
+        bytes32 structHash = keccak256(abi.encode(typeHash, identity, topic, dataHash, expiresAt, claimNonce));
+        bytes32 domain = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("PassportKitClaim"),
+                keccak256("1"),
+                block.chainid,
+                address(issuer)
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(signerPk, keccak256(abi.encodePacked("\x19\x01", domain, structHash)));
+        return abi.encodePacked(r, s, v);
+    }
+
+    /// The kill switch: the issuer's per-user latch, re-read by the gate on every call.
+    function _setRevoked(address wallet, uint256 topic, bool value) internal {
+        address identity = factory.identityOfWallet(wallet); // resolve first: vm.prank hits the NEXT call
+        vm.prank(admin);
+        issuer.setRevoked(identity, topic, value);
     }
 
     /// @dev Sells CASA for mUSD as `who`, announcing `who` through hookData. Kept free of
@@ -183,8 +259,7 @@ contract MandateHookTest is Test {
     }
 
     function test_owner_revocation_kills_agent_swaps() public {
-        vm.prank(admin);
-        passport.revokePassport(ownerB);
+        _setRevoked(ownerB, KYC, true);
         _expectNotAuthorized(IHooks.beforeSwap.selector, concierge, "OWNER_NOT_COMPLIANT");
         _swapAsConcierge(-1e18);
     }
@@ -203,8 +278,7 @@ contract MandateHookTest is Test {
     }
 
     function test_owner_exit_always_free_even_when_not_compliant() public {
-        vm.prank(admin);
-        passport.revokePassport(ownerA);
+        _setRevoked(ownerA, KYC, true);
         vm.prank(ownerA);
         liquidityRouter.modifyLiquidity(poolKey, -887220, 887220, -1_000e18, abi.encode(ownerA));
     }
