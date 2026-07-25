@@ -94,10 +94,17 @@ export function assembleExpiring(data, { days, nowSec }) {
 
 // ---------------------------------------------------------------- blast radius
 
-export function assembleBlastRadius(data, { issuer }) {
+export function assembleBlastRadius(data, { issuer, nowSec }) {
   const x = issuer.toLowerCase();
   const trustedTopics = (data.issuerTrusts ?? []).map((t) => t.topicName);
-  const claims = data.claims ?? [];
+  // No event fires when a claim expires, so its indexed status stays ACTIVE —
+  // but the gate's isClaimValid already refuses it. Filter expiry here (the
+  // one place both the live path and the fixtures go through) or an expired
+  // claim counts as reliance, and worse, as redundant coverage ("no loss").
+  const now = Math.floor(nowSec ?? Date.now() / 1000);
+  const claims = (data.claims ?? []).filter(
+    (c) => !c.expiresAt || c.expiresAt === '0' || Number(c.expiresAt) > now,
+  );
   const tenants = data.tenants ?? [];
 
   // topic -> other trusted issuers (redundancy a claim could fall back to)
@@ -354,7 +361,7 @@ export async function askOfficer(question, { client, nowSec = Date.now() / 1000,
 
   const assembled =
     intent.kind === 'expiring' ? assembleExpiring(data, { days: intent.days, nowSec })
-    : intent.kind === 'blast' ? assembleBlastRadius(data, { issuer: intent.issuer })
+    : intent.kind === 'blast' ? assembleBlastRadius(data, { issuer: intent.issuer, nowSec })
     : assembleAuditTrail(data, { wallet: intent.wallet });
 
   const summary = narrator ? await narrator(assembled.summary, assembled) : assembled.summary;

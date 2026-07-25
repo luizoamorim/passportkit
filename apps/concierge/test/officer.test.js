@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeFixtureClient } from '../lib/graph.js';
-import { askOfficer, assembleAuditTrail, makeNarrator, parseQuestion } from '../lib/officer.js';
+import { askOfficer, assembleAuditTrail, assembleBlastRadius, makeNarrator, parseQuestion } from '../lib/officer.js';
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), '../lib/fixtures');
 const client = makeFixtureClient(FIXTURES);
@@ -81,6 +81,46 @@ test('blast_radius_treats_redundant_coverage_as_no_loss', async () => {
   const bobLine = r.answer.find((l) => l.includes('0xb0b')) ?? r.answer.find((l) => l.includes('no loss'));
   assert.ok(bobLine, 'expected a line about the redundantly-covered identity');
   assert.match(bobLine, /no loss/);
+});
+
+test('blast_radius_ignores_expired_claims', async () => {
+  // carol's only claim from this issuer expired 5 days before NOW — she must
+  // not appear in the blast at all (the gate already refuses her claim today)
+  const r = await askOfficer(`blast radius if issuer ${ISSUER} revoked`, { client, nowSec: NOW });
+  assert.ok(!r.answer.some((l) => l.includes('0xca40')), 'expired-claim identity leaked into the blast');
+  assert.equal(r.facts.identitiesAffected, 2);
+  assert.equal(r.facts.activeClaimsFromIssuer, 3);
+});
+
+test('blast_radius_does_not_count_expired_coverage_as_redundancy', () => {
+  const KYC = '115060095847048098044821322973818454820402841703488225926853443483099350806907';
+  const other = '0xc1a1000000000000000000000000000000000002';
+  const identity = {
+    id: '0x1d00000000000000000000000000000000000001',
+    wallet: '0xdddd000000000000000000000000000000000001',
+    policyStatuses: [{ eligible: true, reason: 'OK', policy: { id: '1', topicNames: ['KYC_VERIFIED'] } }],
+    agents: [],
+  };
+  const mk = (issuer, expiresAt) => ({
+    id: `c-${issuer}`, topicName: 'KYC_VERIFIED', topic: KYC, expiresAt: String(expiresAt),
+    status: 'ACTIVE', addedAt: '0', issuer: { id: issuer }, identity,
+  });
+  const r = assembleBlastRadius(
+    {
+      issuerTrusts: [{ topic: KYC, topicName: 'KYC_VERIFIED' }],
+      allTrust: [
+        { topic: KYC, issuer: { id: ISSUER } },
+        { topic: KYC, issuer: { id: other } },
+      ],
+      // the other issuer's claim EXPIRED — it is not redundancy
+      claims: [mk(ISSUER, NOW + 100 * 86400), mk(other, NOW - 86400)],
+      policies: [{ id: '1', topics: [KYC], topicNames: ['KYC_VERIFIED'] }],
+      tenants: [],
+    },
+    { issuer: ISSUER, nowSec: NOW },
+  );
+  assert.equal(r.facts.identitiesLosingEligibility, 1);
+  assert.ok(!r.lines.join('\n').includes('no loss'));
 });
 
 test('blast_radius_names_enforcement_surfaces', async () => {
