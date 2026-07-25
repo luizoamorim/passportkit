@@ -1,8 +1,7 @@
 .PHONY: help up up-testnet down api cre web db migrate ngrok logs \
         test-kyc test-green test-red status stop reset-db \
         build-cre env-check deploy-testnet deploy-local anvil \
-        demo demo-chain demo-deploy demo-web demo-stop \
-        hook-demo hook-demo-explorer concierge-demo
+        demo demo-chain demo-deploy demo-web demo-stop demo-explorer
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -48,6 +47,7 @@ help:
 	@echo "    make demo          — anvil + one deployed world + the site on :$(WEB_PORT)"
 	@echo "                         (override with RPC_PORT=… WEB_PORT=…)"
 	@echo "    make demo-stop     — stop that site, and its anvil if make demo started it"
+	@echo "    make demo-explorer — Otterscan on :5100 against the demo chain"
 	@echo ""
 	@echo "  Setup"
 	@echo "    make env-check     — verify .env files exist"
@@ -439,17 +439,11 @@ demo-stop:
 	fi
 	@echo "✓ Demo stopped"
 
-# ─── Deprecated aliases (the two standalone demos are now routes) ─────────────
+# ─── Block explorer for the demo chain ────────────────────────────────────────
+# Points at $(RPC_PORT), so it follows `make demo RPC_PORT=…` to whichever chain
+# the demo is actually on.
 
-hook-demo:
-	@echo "⚠ make hook-demo is deprecated — the hook demo is /markets in the unified site. Running make demo."
-	@$(MAKE) demo
-
-concierge-demo:
-	@echo "⚠ make concierge-demo is deprecated — the concierge demo is /concierge in the unified site. Running make demo."
-	@$(MAKE) demo
-
-hook-demo-explorer:
-	@echo "Otterscan explorer for the local anvil chain → http://localhost:5100"
+demo-explorer:
+	@echo "Otterscan explorer for the demo chain on :$(RPC_PORT) → http://localhost:5100"
 	@docker run --rm -p 5100:80 --add-host=host.docker.internal:host-gateway \
 	  -e ERIGON_URL=http://host.docker.internal:$(RPC_PORT) otterscan/otterscan:latest

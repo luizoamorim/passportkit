@@ -7,7 +7,7 @@ import {
   aggregateLiquidity,
   lastPrices,
   poolIdOf,
-} from '../lib/positions.js';
+} from '../../src/lib/demo/positions.js';
 
 const POOL_A = '0x' + 'aa'.repeat(32);
 const POOL_B = '0x' + 'bb'.repeat(32);
