@@ -16,20 +16,27 @@ import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {ClaimRegistry} from "../src/ClaimRegistry.sol";
-import {CompliancePassport} from "../src/CompliancePassport.sol";
-import {AccessGate} from "../src/AccessGate.sol";
-import {IAccessGate} from "../src/interfaces/IAccessGate.sol";
-import {HouseTreasury} from "../src/agents/HouseTreasury.sol";
+import {IssuerRegistry} from "../src/IssuerRegistry.sol";
+import {ClaimIssuer} from "../src/ClaimIssuer.sol";
+import {IdentityFactory} from "../src/IdentityFactory.sol";
+import {Identity} from "../src/Identity.sol";
+import {EligibilityGate} from "../src/EligibilityGate.sol";
+import {ClaimTopics} from "../src/libraries/Types.sol";
+import {HouseTreasury, IEligibilityGate, IIdentityResolver} from "../src/agents/HouseTreasury.sol";
 import {HouseToken} from "../src/agents/HouseToken.sol";
 import {MandateHook, IHouseTreasuryStanding} from "../src/hooks/MandateHook.sol";
 
 /**
  * @title DeployConciergeDemo
  * @notice Deploys the full House Concierge Agent demo world:
- *         PassportCreds stack → HouseTreasury (owners: operator + ana) → CASA/mUSD
- *         v4 pool gated by MandateHook → concierge mandate funded and seeded with
- *         liquidity. Writes every address to apps/concierge/addresses.json.
+ *         PassportKit stack (IssuerRegistry → ClaimIssuer → IdentityFactory → EligibilityGate)
+ *         → HouseTreasury (owners: operator + ana, policy 1) → CASA/mUSD v4 pool gated by
+ *         MandateHook → concierge mandate funded and seeded with liquidity.
+ *         Writes every address to apps/concierge/addresses.json.
+ *
+ * The operator plays every platform role here: admin, issuer signer (EIP-712) and LP.
+ * Claims follow Model B — the operator SIGNS off-chain, the holder SUBMITS from their own wallet.
+ * The concierge deliberately gets NO identity: its authority is the owners', never its own.
  *
  * Local anvil (dev accounts #0 operator, #1 ana, #2 concierge, #3 plumber — no env needed):
  *   forge script script/DeployConciergeDemo.s.sol --rpc-url http://localhost:8545 --broadcast
@@ -47,14 +54,19 @@ contract DeployConciergeDemo is Script {
     uint256 constant ANVIL_CONCIERGE_PK = 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6;
     uint256 constant ANVIL_PLUMBER_PK = 0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a;
 
+    /// Policy ids are repo-wide constants (see apps/api/.env.example) — the house gates
+    /// its owners on the Deal Room policy, exactly like the ComplianceHook demo's deal pool.
+    uint256 constant POLICY_DEAL_ROOM = 1; // [KYC_VERIFIED]
+
     uint256 OPERATOR_PK;
     uint256 ANA_PK;
     uint256 CONCIERGE_PK;
     uint256 PLUMBER_PK;
 
-    ClaimRegistry registry;
-    CompliancePassport passport;
-    AccessGate gate;
+    IssuerRegistry issuerRegistry;
+    ClaimIssuer claimIssuer;
+    IdentityFactory identityFactory;
+    EligibilityGate eligibilityGate;
     PoolManager poolManager;
     PoolSwapTest swapRouter;
     DemoPositionRouter liquidityRouter;
@@ -68,6 +80,8 @@ contract DeployConciergeDemo is Script {
     address ana;
     address concierge;
     address plumber;
+    address operatorIdentity;
+    address anaIdentity;
     uint256 nonce;
 
     function run() external {
@@ -89,12 +103,15 @@ contract DeployConciergeDemo is Script {
 
         vm.startBroadcast(OPERATOR_PK);
         _deployStack();
-        _verifyOwners();
+        _onboardOwners();
         _deployTreasury();
         _deployPoolInfra();
         _deployHookAndPool();
         _seedLiquidity();
         vm.stopBroadcast();
+
+        // Model B: ana submits her own signed claim from her own wallet
+        _submitClaim(ANA_PK, anaIdentity, ClaimTopics.KYC_VERIFIED);
 
         vm.startBroadcast(CONCIERGE_PK);
         casa.approve(address(swapRouter), type(uint256).max);
@@ -108,36 +125,77 @@ contract DeployConciergeDemo is Script {
 
         _writeAddresses();
 
-        console.log("ClaimRegistry:      ", address(registry));
-        console.log("CompliancePassport: ", address(passport));
-        console.log("AccessGate:         ", address(gate));
+        console.log("IssuerRegistry:     ", address(issuerRegistry));
+        console.log("ClaimIssuer:        ", address(claimIssuer));
+        console.log("IdentityFactory:    ", address(identityFactory));
+        console.log("EligibilityGate:    ", address(eligibilityGate));
         console.log("PoolManager:        ", address(poolManager));
         console.log("HouseTreasury:      ", address(treasury));
         console.log("MandateHook:        ", address(hook));
     }
 
     function _deployStack() internal {
-        registry = new ClaimRegistry(operator);
-        passport = new CompliancePassport(operator, address(registry));
-        gate = new AccessGate(address(registry), address(passport));
+        issuerRegistry = new IssuerRegistry(operator);
+        claimIssuer = new ClaimIssuer(operator, operator); // the operator key is the EIP-712 signer
+        identityFactory = new IdentityFactory(operator, address(issuerRegistry));
+        eligibilityGate = new EligibilityGate(operator, address(issuerRegistry));
 
-        // The operator plays the CRE role in this demo
-        registry.grantRole(registry.CRE_UPDATER_ROLE(), operator);
-        passport.grantRole(passport.CRE_UPDATER_ROLE(), operator);
+        issuerRegistry.setTrusted(address(claimIssuer), ClaimTopics.KYC_VERIFIED, true);
+
+        uint256[] memory dealTopics = new uint256[](1);
+        dealTopics[0] = ClaimTopics.KYC_VERIFIED;
+        eligibilityGate.setPolicy(POLICY_DEAL_ROOM, dealTopics);
     }
 
-    function _verifyOwners() internal {
-        // Both house owners need a valid KYC claim so the treasury sees them as compliant
-        _verifyKyc(operator);
-        _verifyKyc(ana);
+    /// One identity per house owner. The operator submits its own claim inline (it is the
+    /// broadcaster here); ana's lands from her own wallet after this broadcast block.
+    /// The concierge and the plumber get no identity — the agent's authority is the owners'.
+    function _onboardOwners() internal {
+        operatorIdentity = identityFactory.createIdentity(operator);
+        anaIdentity = identityFactory.createIdentity(ana);
+
+        _signAndSubmit(operatorIdentity, ClaimTopics.KYC_VERIFIED);
     }
 
-    function _verifyKyc(address user) internal {
-        uint64 expiry = uint64(block.timestamp + 365 days);
-        registry.submitClaim(
-            user, registry.KYC_AML_VERIFIED(), true, _verificationId(), keccak256("demo-attest"), expiry
+    /// Signs (issuer) and submits (holder) in one call — only valid while broadcasting as the holder.
+    function _signAndSubmit(address identity, uint256 topic) internal {
+        (bytes memory sig, bytes memory data) = _signClaim(identity, topic);
+        Identity(identity).submitClaim(topic, address(claimIssuer), sig, data);
+    }
+
+    function _submitClaim(uint256 holderPk, address identity, uint256 topic) internal {
+        (bytes memory sig, bytes memory data) = _signClaim(identity, topic);
+        vm.startBroadcast(holderPk);
+        Identity(identity).submitClaim(topic, address(claimIssuer), sig, data);
+        vm.stopBroadcast();
+    }
+
+    /// EIP-712 "Claim" signed by the issuer signer (the operator key). Zero PII: only a hash.
+    function _signClaim(address identity, uint256 topic)
+        internal
+        returns (bytes memory sig, bytes memory data)
+    {
+        uint64 expiresAt = uint64(block.timestamp + 365 days);
+        bytes32 dataHash = keccak256(abi.encode("demo-attest", nonce));
+        bytes32 claimNonce = keccak256(abi.encode("demo-session", nonce++));
+        data = abi.encode(dataHash, expiresAt, claimNonce);
+
+        bytes32 typeHash = keccak256(
+            "Claim(address identity,uint256 topic,bytes32 dataHash,uint64 expiresAt,bytes32 nonce)"
         );
-        passport.syncPassport(user);
+        bytes32 structHash = keccak256(abi.encode(typeHash, identity, topic, dataHash, expiresAt, claimNonce));
+        bytes32 domain = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("PassportKitClaim"),
+                keccak256("1"),
+                block.chainid,
+                address(claimIssuer)
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(OPERATOR_PK, keccak256(abi.encodePacked("\x19\x01", domain, structHash)));
+        sig = abi.encodePacked(r, s, v);
     }
 
     function _deployTreasury() internal {
@@ -149,7 +207,14 @@ contract DeployConciergeDemo is Script {
         owners[0] = operator;
         owners[1] = ana;
         treasury = new HouseTreasury(
-            owners, 2, IERC20(address(musd)), IAccessGate(address(gate)), "Casa Azul Scrip", "CASA"
+            owners,
+            2,
+            IERC20(address(musd)),
+            IEligibilityGate(address(eligibilityGate)),
+            IIdentityResolver(address(identityFactory)),
+            POLICY_DEAL_ROOM,
+            "Casa Azul Scrip",
+            "CASA"
         );
         casa = treasury.HOUSE_TOKEN();
 
@@ -198,18 +263,15 @@ contract DeployConciergeDemo is Script {
         );
     }
 
-    function _verificationId() internal returns (bytes32) {
-        return keccak256(abi.encode("demo-verification", nonce++));
-    }
-
     function _writeAddresses() internal {
         string memory json = string.concat(
             '{\n',
             '  "chainId": ', vm.toString(block.chainid), ',\n',
             '  "deployBlock": ', vm.toString(block.number), ',\n',
-            '  "claimRegistry": "', vm.toString(address(registry)), '",\n',
-            '  "compliancePassport": "', vm.toString(address(passport)), '",\n',
-            '  "accessGate": "', vm.toString(address(gate)), '",\n',
+            '  "issuerRegistry": "', vm.toString(address(issuerRegistry)), '",\n',
+            '  "claimIssuer": "', vm.toString(address(claimIssuer)), '",\n',
+            '  "identityFactory": "', vm.toString(address(identityFactory)), '",\n',
+            '  "eligibilityGate": "', vm.toString(address(eligibilityGate)), '",\n',
             '  "poolManager": "', vm.toString(address(poolManager)), '",\n',
             '  "swapRouter": "', vm.toString(address(swapRouter)), '",\n',
             '  "liquidityRouter": "', vm.toString(address(liquidityRouter)), '",\n'
@@ -220,6 +282,7 @@ contract DeployConciergeDemo is Script {
             '  "casa": "', vm.toString(address(casa)), '",\n',
             '  "treasury": "', vm.toString(address(treasury)), '",\n',
             '  "mandateHook": "', vm.toString(address(hook)), '",\n',
+            '  "policyId": ', vm.toString(POLICY_DEAL_ROOM), ',\n',
             '  "fee": 3000,\n',
             '  "tickSpacing": 60,\n'
         );
@@ -230,6 +293,10 @@ contract DeployConciergeDemo is Script {
             '    "ana": "', vm.toString(ana), '",\n',
             '    "concierge": "', vm.toString(concierge), '",\n',
             '    "plumber": "', vm.toString(plumber), '"\n',
+            '  },\n',
+            '  "identities": {\n',
+            '    "operator": "', vm.toString(operatorIdentity), '",\n',
+            '    "ana": "', vm.toString(anaIdentity), '"\n',
             '  }\n',
             '}\n'
         );

@@ -8,11 +8,13 @@ import {
   createPublicClient,
   createWalletClient,
   http as httpTransport,
+  decodeAbiParameters,
   encodeAbiParameters,
   formatEther,
   keccak256,
   parseEther,
   toHex,
+  zeroAddress,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry, sepolia } from 'viem/chains';
@@ -62,16 +64,25 @@ const KEYS = {
 // the house owners, in the order the treasury holds them
 const OWNERS = ['operator', 'ana'];
 
-const CLAIM_TYPES = {
-  kyc: keccak256(toHex('KYC_AML_VERIFIED')),
-  accredited: keccak256(toHex('ACCREDITED_INVESTOR')),
+// the operator key doubles as the ClaimIssuer's authorized EIP-712 signer
+const issuerSigner = privateKeyToAccount(KEYS.operator);
+
+const ZERO_ADDRESS = zeroAddress;
+
+// Identity claim payload: abi.encode(dataHash, expiresAt, nonce) — a hash, never PII
+const CLAIM_DATA_ABI = [{ type: 'bytes32' }, { type: 'uint64' }, { type: 'bytes32' }];
+
+// ERC-735 topics: uint256(keccak256(name)) — same numbers as libraries/Types.sol
+const CLAIM_TOPICS = {
+  kyc: BigInt(keccak256(toHex('KYC_VERIFIED'))),
+  accredited: BigInt(keccak256(toHex('ACCREDITED_INVESTOR'))),
 };
-const CLAIM_TYPE_NAMES = {
-  [CLAIM_TYPES.kyc]: 'KYC_AML_VERIFIED',
-  [CLAIM_TYPES.accredited]: 'ACCREDITED_INVESTOR',
+const CLAIM_TOPIC_NAMES = {
+  [CLAIM_TOPICS.kyc]: 'KYC_VERIFIED',
+  [CLAIM_TOPICS.accredited]: 'ACCREDITED_INVESTOR',
 };
-const CLAIM_STATUS = ['UNVERIFIED', 'VERIFIED', 'FAILED', 'EXPIRED', 'REVOKED'];
-const PASSPORT_STATUS = ['NONE', 'IN_PROGRESS', 'LIMITED', 'GREEN', 'RED', 'REVOKED', 'EXPIRED'];
+// ERC-734 key purposes (Types.sol KeyPurpose)
+const KEY_PURPOSES = { 1n: 'MANAGEMENT', 2n: 'ACTION', 3n: 'CLAIM' };
 
 // decision engine: mock rules by default, OpenAI-compatible or 0G when configured
 const DECIDER_KIND = ENV.DECIDER ?? 'mock';
@@ -134,44 +145,55 @@ const SWAP_ROUTER_ABI = [
   },
 ];
 
-const REGISTRY_ABI = [
+// Identity (ERC-735) — Model B: the HOLDER submits their own issuer-signed claim
+const IDENTITY_ABI = [
   {
     type: 'function',
     name: 'submitClaim',
     stateMutability: 'nonpayable',
-    inputs: [
-      { type: 'address' },
-      { type: 'bytes32' },
-      { type: 'bool' },
-      { type: 'bytes32' },
-      { type: 'bytes32' },
-      { type: 'uint64' },
-    ],
-    outputs: [],
+    inputs: [{ type: 'uint256' }, { type: 'address' }, { type: 'bytes' }, { type: 'bytes' }],
+    outputs: [{ type: 'bytes32' }],
   },
   {
     type: 'function',
-    name: 'revokeClaim',
-    stateMutability: 'nonpayable',
-    inputs: [{ type: 'address' }, { type: 'bytes32' }],
-    outputs: [],
-  },
-  {
-    type: 'function',
-    name: 'hasValidClaim',
+    name: 'getClaim',
     stateMutability: 'view',
-    inputs: [{ type: 'address' }, { type: 'bytes32' }],
+    inputs: [{ type: 'uint256' }, { type: 'address' }],
+    outputs: [{ type: 'bool' }, { type: 'bytes' }, { type: 'bytes' }],
+  },
+];
+
+const FACTORY_ABI = [
+  { type: 'function', name: 'identityOfWallet', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'createIdentity', stateMutability: 'nonpayable', inputs: [{ type: 'address' }], outputs: [{ type: 'address' }] },
+];
+
+// ClaimIssuer — signs off-chain (EIP-712) and holds the revocation latch
+const ISSUER_ABI = [
+  {
+    type: 'function',
+    name: 'setRevoked',
+    stateMutability: 'nonpayable',
+    inputs: [{ type: 'address' }, { type: 'uint256' }, { type: 'bool' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'revoked',
+    stateMutability: 'view',
+    inputs: [{ type: 'address' }, { type: 'uint256' }],
     outputs: [{ type: 'bool' }],
   },
 ];
 
-const PASSPORT_ABI = [
-  { type: 'function', name: 'syncPassport', stateMutability: 'nonpayable', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }, { type: 'uint8' }] },
-  { type: 'function', name: 'statusOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint8' }] },
-];
-
 const GATE_ABI = [
-  { type: 'function', name: 'canAccessDealRoom', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'bool' }] },
+  {
+    type: 'function',
+    name: 'isEligible',
+    stateMutability: 'view',
+    inputs: [{ type: 'address' }, { type: 'uint256' }],
+    outputs: [{ type: 'bool' }, { type: 'bytes32' }],
+  },
 ];
 
 const TREASURY_ABI = [
@@ -208,54 +230,58 @@ const ERC20_ABI = [
 
 // events the tx inspector can decode
 const INSPECTOR_EVENTS = [
+  // --- PassportKit stack ---
   {
     type: 'event',
-    name: 'ClaimUpdated',
+    name: 'IdentityCreated',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'claimType', type: 'bytes32', indexed: true },
-      { name: 'status', type: 'uint8', indexed: false },
-      { name: 'approved', type: 'bool', indexed: false },
-      { name: 'verificationIdHash', type: 'bytes32', indexed: true },
-      { name: 'attestationHash', type: 'bytes32', indexed: false },
-      { name: 'expiresAt', type: 'uint64', indexed: false },
+      { name: 'wallet', type: 'address', indexed: true },
+      { name: 'identity', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'ClaimAdded',
+    inputs: [
+      { name: 'claimId', type: 'bytes32', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
     ],
   },
   {
     type: 'event',
     name: 'ClaimRevoked',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'claimType', type: 'bytes32', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
     ],
   },
   {
     type: 'event',
-    name: 'PassportMinted',
+    name: 'RevocationSet',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'tokenId', type: 'uint256', indexed: true },
-      { name: 'status', type: 'uint8', indexed: false },
+      { name: 'identity', type: 'address', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'revoked', type: 'bool', indexed: false },
     ],
   },
   {
     type: 'event',
-    name: 'PassportStatusUpdated',
+    name: 'KeyAdded',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'tokenId', type: 'uint256', indexed: true },
-      { name: 'status', type: 'uint8', indexed: false },
+      { name: 'key', type: 'bytes32', indexed: true },
+      { name: 'purpose', type: 'uint256', indexed: true },
     ],
   },
   {
     type: 'event',
-    name: 'PassportRevoked',
+    name: 'TrustedSet',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'ok', type: 'bool', indexed: false },
     ],
   },
-  { type: 'event', name: 'Locked', inputs: [{ name: 'tokenId', type: 'uint256', indexed: false }] },
   // --- HouseTreasury ---
   {
     type: 'event',
@@ -565,17 +591,36 @@ async function readAgent() {
   };
 }
 
+async function identityOf(wallet) {
+  const identity = await publicClient.readContract({
+    address: A.identityFactory,
+    abi: FACTORY_ABI,
+    functionName: 'identityOfWallet',
+    args: [wallet],
+  });
+  return identity === ZERO_ADDRESS ? null : identity;
+}
+
+/// The same read the treasury makes on-chain: wallet → identity → gate. A wallet with no
+/// identity is never compliant, so the UI agrees with HouseTreasury.isCompliantOwner.
+async function isCompliant(wallet) {
+  const identity = await identityOf(wallet);
+  if (!identity) return false;
+  const [ok] = await publicClient.readContract({
+    address: A.eligibilityGate,
+    abi: GATE_ABI,
+    functionName: 'isEligible',
+    args: [identity, BigInt(A.policyId)],
+  });
+  return ok;
+}
+
 async function readOwners() {
   return Promise.all(
     OWNERS.map(async (name) => ({
       name,
       wallet: actorAddress[name],
-      compliant: await publicClient.readContract({
-        address: A.accessGate,
-        abi: GATE_ABI,
-        functionName: 'canAccessDealRoom',
-        args: [actorAddress[name]],
-      }),
+      compliant: await isCompliant(actorAddress[name]),
     })),
   );
 }
@@ -777,32 +822,57 @@ async function doGrantMandate() {
   return { ok: true, txHashes: [txHash] };
 }
 
-// Owner compliance is the agent's root of authority — the operator plays the
-// issuer/CRE here, exactly as in the ComplianceHook demo.
-async function doRevokeOwnerKyc(owner) {
-  const wallet = actorAddress[owner];
-  const txHashes = [
-    await write('operator', A.claimRegistry, REGISTRY_ABI, 'revokeClaim', [wallet, CLAIM_TYPES.kyc]),
-    await write('operator', A.compliancePassport, PASSPORT_ABI, 'syncPassport', [wallet]),
-  ];
-  return { ok: true, txHashes };
+async function setRevoked(identity, topic, value) {
+  return write('operator', A.claimIssuer, ISSUER_ABI, 'setRevoked', [identity, topic, value]);
 }
 
+/// The issuer signs a claim OFF-CHAIN (EIP-712, no gas). Both keys are local anvil keys,
+/// so the demo plays both sides: operator = issuer signer, the owner = holder.
+async function signClaim(identity, topic, expiresAt) {
+  const dataHash = keccak256(toHex(`demo-attest-${Date.now()}-${verificationCounter++}`));
+  const nonce = keccak256(toHex(`demo-session-${Date.now()}-${verificationCounter++}`));
+  const signature = await issuerSigner.signTypedData({
+    domain: { name: 'PassportKitClaim', version: '1', chainId: A.chainId, verifyingContract: A.claimIssuer },
+    types: {
+      Claim: [
+        { name: 'identity', type: 'address' },
+        { name: 'topic', type: 'uint256' },
+        { name: 'dataHash', type: 'bytes32' },
+        { name: 'expiresAt', type: 'uint64' },
+        { name: 'nonce', type: 'bytes32' },
+      ],
+    },
+    primaryType: 'Claim',
+    message: { identity, topic, dataHash, expiresAt, nonce },
+  });
+  return { signature, data: encodeAbiParameters(CLAIM_DATA_ABI, [dataHash, expiresAt, nonce]) };
+}
+
+// THE MONEY MOMENT: owner compliance is the agent's root of authority. One latch flip on
+// the ClaimIssuer and the treasury — hence both rails — refuses the concierge on the very
+// next call. The operator plays the issuer here, exactly as in the ComplianceHook demo.
+async function doRevokeOwnerKyc(owner) {
+  const identity = await identityOf(actorAddress[owner]);
+  if (!identity) return { ok: false, reason: 'NO_IDENTITY', message: `${owner} has no identity yet` };
+  return { ok: true, txHashes: [await setRevoked(identity, CLAIM_TOPICS.kyc, true)] };
+}
+
+/// Issuer re-approval: re-open the latch. The claim is still stored on the owner's Identity,
+/// so they clear the policy again immediately — unless it expired meanwhile (timewarp), in
+/// which case the issuer signs a fresh one and the holder submits it (Model B).
 async function doRestoreOwnerKyc(owner) {
   const wallet = actorAddress[owner];
-  const expiresAt = BigInt((await chainNow()) + MANDATE_DURATION);
-  const verificationIdHash = keccak256(toHex(`demo-${Date.now()}-${verificationCounter++}`));
-  const txHashes = [
-    await write('operator', A.claimRegistry, REGISTRY_ABI, 'submitClaim', [
-      wallet,
-      CLAIM_TYPES.kyc,
-      true,
-      verificationIdHash,
-      keccak256(toHex('demo-attest')),
-      expiresAt,
-    ]),
-    await write('operator', A.compliancePassport, PASSPORT_ABI, 'syncPassport', [wallet]),
-  ];
+  const identity = await identityOf(wallet);
+  if (!identity) return { ok: false, reason: 'NO_IDENTITY', message: `${owner} has no identity yet` };
+
+  const txHashes = [await setRevoked(identity, CLAIM_TOPICS.kyc, false)];
+  if (!(await isCompliant(wallet))) {
+    const expiresAt = BigInt((await chainNow()) + MANDATE_DURATION);
+    const { signature, data } = await signClaim(identity, CLAIM_TOPICS.kyc, expiresAt);
+    txHashes.push(
+      await write(owner, identity, IDENTITY_ABI, 'submitClaim', [CLAIM_TOPICS.kyc, A.claimIssuer, signature, data]),
+    );
+  }
   return { ok: true, txHashes };
 }
 
@@ -827,10 +897,10 @@ async function doReset() {
 // ---------------------------------------------------------------- tx inspector
 
 function friendlyArg(name, value) {
-  if (name === 'claimType' && CLAIM_TYPE_NAMES[value]) return CLAIM_TYPE_NAMES[value];
-  if (name === 'status' && typeof value === 'number') return PASSPORT_STATUS[value] ?? CLAIM_STATUS[value] ?? value;
+  if (name === 'topic' && CLAIM_TOPIC_NAMES[value]) return CLAIM_TOPIC_NAMES[value];
+  if (name === 'purpose' && typeof value === 'bigint') return KEY_PURPOSES[value] ?? value.toString();
   if (typeof value === 'bigint') {
-    if (name === 'expiresAt' || name === 'tokenId' || name === 'fee' || name === 'id' || name === 'approvals') {
+    if (name === 'expiresAt' || name === 'topic' || name === 'fee' || name === 'id' || name === 'approvals') {
       return value.toString();
     }
     const abs = value < 0n ? -value : value;
@@ -843,9 +913,10 @@ function friendlyArg(name, value) {
 function contractLabel(address) {
   const a = address.toLowerCase();
   const map = {
-    [A.claimRegistry.toLowerCase()]: 'ClaimRegistry',
-    [A.compliancePassport.toLowerCase()]: 'CompliancePassport',
-    [A.accessGate.toLowerCase()]: 'AccessGate',
+    [A.issuerRegistry.toLowerCase()]: 'IssuerRegistry',
+    [A.claimIssuer.toLowerCase()]: 'ClaimIssuer',
+    [A.identityFactory.toLowerCase()]: 'IdentityFactory',
+    [A.eligibilityGate.toLowerCase()]: 'EligibilityGate',
     [A.poolManager.toLowerCase()]: 'PoolManager',
     [A.swapRouter.toLowerCase()]: 'SwapRouter',
     [A.liquidityRouter.toLowerCase()]: 'LiquidityRouter',
@@ -854,6 +925,9 @@ function contractLabel(address) {
     [A.musd.toLowerCase()]: 'mUSD',
     [A.casa.toLowerCase()]: 'CASA',
   };
+  for (const [name, identity] of Object.entries(A.identities ?? {})) {
+    map[identity.toLowerCase()] = `Identity (${name})`;
+  }
   return map[a] ?? short(address);
 }
 
@@ -963,9 +1037,10 @@ const server = http.createServer(async (req, res) => {
         explorer: EXPLORER_URL,
         chainId: A.chainId,
         contracts: {
-          claimRegistry: A.claimRegistry,
-          compliancePassport: A.compliancePassport,
-          accessGate: A.accessGate,
+          issuerRegistry: A.issuerRegistry,
+          claimIssuer: A.claimIssuer,
+          identityFactory: A.identityFactory,
+          eligibilityGate: A.eligibilityGate,
           poolManager: A.poolManager,
           treasury: A.treasury,
           mandateHook: A.mandateHook,

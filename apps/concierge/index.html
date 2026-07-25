@@ -162,7 +162,7 @@
   <p class="eyebrow">Agent rail · Surface #5</p>
   <h1>An agent that spends <span class="grad">on your passport</span></h1>
   <p class="sub">Casa Azul's concierge holds no passport of its own. Its authority is the owners': the
-    <b>HouseTreasury</b> re-checks every owner against <b>AccessGate</b> on every read, and the
+    <b>HouseTreasury</b> re-checks every owner against the <b>EligibilityGate</b> on every read, and the
     <b>MandateHook</b> refuses the budget pool the moment the mandate dies or an owner falls out of
     compliance. Routine tickets are paid autonomously (CASA → mUSD → x402 invoice); anything over the
     per-transaction cap goes to the owners' approval queue.</p>
@@ -369,7 +369,7 @@ async function render() {
       ? s.payments.map(paymentRow).join('')
       : '<p class="empty">nothing pending — over-cap tickets land here.</p>';
     $('#addrs').textContent =
-      `treasury ${short(s.contracts.treasury)} · hook ${short(s.contracts.mandateHook)} · gate ${short(s.contracts.accessGate)} · CASA ${short(s.contracts.casa)} · mUSD ${short(s.contracts.musd)}`;
+      `treasury ${short(s.contracts.treasury)} · hook ${short(s.contracts.mandateHook)} · gate ${short(s.contracts.eligibilityGate)} · CASA ${short(s.contracts.casa)} · mUSD ${short(s.contracts.musd)}`;
   } catch {
     $('#chain').classList.remove('up');
     $('#chainlabel').textContent = 'server unreachable';
@@ -446,7 +446,7 @@ window.revokeKyc = (owner) => act(async () => {
 
 window.restoreKyc = (owner) => act(async () => {
   const r = await post('/api/restore-owner-kyc', { owner });
-  if (r.ok) log(`CRE: restored ${owner}'s KYC claim <span class="good">✓</span> ${txLinks(r.txHashes)}`);
+  if (r.ok) log(`issuer: restored ${owner}'s KYC claim <span class="good">✓</span> ${txLinks(r.txHashes)}`);
   else log(`restore KYC of ${owner} <span class="bad">✗</span> ${esc(r.message)}`);
 });
 
