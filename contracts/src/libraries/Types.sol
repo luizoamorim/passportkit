@@ -26,6 +26,7 @@ library Reason {
     bytes32 internal constant MISSING_PERSONHOOD  = "MISSING_PERSONHOOD";
     bytes32 internal constant MISSING_ACCREDITED  = "MISSING_ACCREDITED";
     bytes32 internal constant MISSING_CLAIM       = "MISSING_CLAIM";
+    bytes32 internal constant NO_POLICY           = "NO_POLICY";
 }
 
 /// Minimal interface the Identity + EligibilityGate rely on from the issuer.

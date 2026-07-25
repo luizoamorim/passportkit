@@ -35,11 +35,12 @@ contract IssuerRegistry is AccessControl {
 
     function setTrusted(address issuer, uint256 topic, bool ok) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(issuer != address(0), "zero issuer");
-        if (ok && !_trusted[issuer][topic]) {
+        if (ok == _trusted[issuer][topic]) return; // no-op: don't emit a phantom state transition
+        if (ok) {
             _trusted[issuer][topic] = true;
             _issuers[topic].push(issuer);
             _idx1[topic][issuer] = _issuers[topic].length; // index + 1
-        } else if (!ok && _trusted[issuer][topic]) {
+        } else {
             _trusted[issuer][topic] = false;
             _removeFromTopic(topic, issuer);
         }

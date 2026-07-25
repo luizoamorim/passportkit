@@ -32,4 +32,13 @@ contract EligibilityGateTest is Test {
         vm.expectRevert(EligibilityGate.ZeroIssuerRegistry.selector);
         new EligibilityGate(admin, address(0));
     }
+
+    /// An unset policy must FAIL-CLOSED (deny), never allow-all. identity=address(this) is a
+    /// contract so it passes the code.length check and reaches the empty-policy branch.
+    function test_unset_policy_denies() public {
+        EligibilityGate gate = new EligibilityGate(admin, address(new MockRegistry()));
+        (bool ok, bytes32 reason) = gate.isEligible(address(this), 999);
+        assertFalse(ok);
+        assertEq(reason, bytes32("NO_POLICY"));
+    }
 }
