@@ -1,7 +1,7 @@
 /**
- * ABIs the demo runtime reads and writes — lifted verbatim from
- * apps/hook-demo/server.js and apps/concierge/server.js so the routes agree with
- * the standalone demos call for call.
+ * ABIs the demo runtime reads and writes — lifted verbatim from the two
+ * standalone demo servers this app replaced, so the routes agree with them
+ * call for call.
  */
 import type { Abi } from 'viem';
 

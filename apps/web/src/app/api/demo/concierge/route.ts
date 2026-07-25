@@ -317,12 +317,16 @@ interface ConciergeBody {
 }
 
 /// The mock plumber runs in this very app (/api/demo/vendor). settleInvoice appends
-/// '/invoice', so it wants the directory. Same origin as the request unless the
-/// operator points DEMO_VENDOR_URL at a real x402 vendor.
-function vendorUrlFor(req: Request): string {
+/// '/invoice', so it wants the directory. The default is this server's own loopback
+/// address, never `req.url` — a request-derived origin can follow the Host /
+/// X-Forwarded-Host header depending on how the app is served, and a spoofed one
+/// would make the server fetch an attacker's "vendor" and pay its payTo. Set
+/// DEMO_VENDOR_URL to point at a real x402 vendor instead.
+function vendorUrlFor(): string {
   const configured = process.env.DEMO_VENDOR_URL;
   if (configured) return configured.replace(/\/$/, '');
-  return `${new URL(req.url).origin}/api/demo/vendor`;
+  const port = process.env.PORT || process.env.WEB_PORT || '3003';
+  return `http://127.0.0.1:${port}/api/demo/vendor`;
 }
 
 export async function POST(req: Request) {
@@ -340,7 +344,7 @@ export async function POST(req: Request) {
           description: body.description ?? 'house ticket',
           amount,
           category: body.category ?? 'plumbing',
-          vendorUrl: vendorUrlFor(req),
+          vendorUrl: vendorUrlFor(),
         };
         return jsonResponse(200, await doTicket(ticket).catch(failure));
       }

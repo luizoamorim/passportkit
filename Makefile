@@ -23,9 +23,11 @@ RPC_PORT        ?= 8545
 WEB_PORT        ?= 3003
 DEMO_RPC        := http://127.0.0.1:$(RPC_PORT)
 DEMO_URL        := http://localhost:$(WEB_PORT)
-DEMO_ANVIL_LOG  := /tmp/passport-demo-anvil.log
-DEMO_DEPLOY_LOG := /tmp/passport-demo-deploy.log
-DEMO_WEB_LOG    := /tmp/passport-demo-web.log
+# All keyed by the port they describe, so `make demo RPC_PORT=8546 WEB_PORT=3010`
+# writes its own files instead of overwriting the first world's.
+DEMO_ANVIL_LOG  := /tmp/passport-demo-anvil-$(RPC_PORT).log
+DEMO_DEPLOY_LOG := /tmp/passport-demo-deploy-$(RPC_PORT).log
+DEMO_WEB_LOG    := /tmp/passport-demo-web-$(WEB_PORT).log
 # Written only when `demo-chain` starts an anvil itself — `demo-stop` kills the
 # chain only if this says the demo owns it. Keyed by port so two demos on two
 # ports do not claim each other's node.
