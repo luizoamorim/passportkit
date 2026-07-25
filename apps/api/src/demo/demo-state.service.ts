@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { getAddress, keccak256, toHex, type Address } from 'viem';
+import type { WorldCheck } from '../world-id/world-id.types';
 
 export type DemoPersonhoodStatus = 'UNVERIFIED' | 'VERIFIED';
 
@@ -10,7 +11,7 @@ export type DemoPersonhoodStatus = 'UNVERIFIED' | 'VERIFIED';
 @Injectable()
 export class DemoStateService {
   private readonly identities = new Map<string, Address>();
-  private readonly personhood = new Map<string, DemoPersonhoodStatus>();
+  private readonly checks = new Map<string, Set<WorldCheck>>();
 
   get enabled(): boolean {
     return process.env.DEMO_MODE === 'true';
@@ -32,11 +33,22 @@ export class DemoStateService {
     return identity;
   }
 
+  checkFor(wallet: Address, check: WorldCheck): DemoPersonhoodStatus {
+    return this.checks.get(wallet.toLowerCase())?.has(check) ? 'VERIFIED' : 'UNVERIFIED';
+  }
+
+  markCheckVerified(wallet: Address, check: WorldCheck): void {
+    const key = wallet.toLowerCase();
+    const set = this.checks.get(key) ?? new Set<WorldCheck>();
+    set.add(check);
+    this.checks.set(key, set);
+  }
+
   personhoodFor(wallet: Address): DemoPersonhoodStatus {
-    return this.personhood.get(wallet.toLowerCase()) ?? 'UNVERIFIED';
+    return this.checkFor(wallet, 'personhood');
   }
 
   markPersonhoodVerified(wallet: Address): void {
-    this.personhood.set(wallet.toLowerCase(), 'VERIFIED');
+    this.markCheckVerified(wallet, 'personhood');
   }
 }

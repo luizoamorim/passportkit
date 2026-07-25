@@ -1,7 +1,14 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { IsEthereumAddress, IsObject, IsOptional } from 'class-validator';
+import { IsEthereumAddress, IsIn, IsObject, IsOptional } from 'class-validator';
 import { type Address } from 'viem';
 import { WorldIdService } from './world-id.service';
+import { WORLD_CHECKS, type WorldCheck } from './world-id.types';
+
+class RequestWorldIdDto {
+  @IsOptional()
+  @IsIn(WORLD_CHECKS)
+  check?: WorldCheck;
+}
 
 class VerifyWorldIdDto {
   @IsEthereumAddress()
@@ -9,6 +16,10 @@ class VerifyWorldIdDto {
 
   @IsEthereumAddress()
   identity!: Address;
+
+  @IsOptional()
+  @IsIn(WORLD_CHECKS)
+  check?: WorldCheck;
 
   @IsObject()
   idkitResponse!: Record<string, unknown>;
@@ -24,12 +35,17 @@ export class WorldIdController {
   constructor(private readonly worldId: WorldIdService) {}
 
   @Post('request')
-  createRequest() {
-    return this.worldId.createRequest();
+  createRequest(@Body() dto: RequestWorldIdDto) {
+    return this.worldId.createRequest(dto.check ?? 'personhood');
   }
 
   @Post('verify')
   verify(@Body() dto: VerifyWorldIdDto) {
-    return this.worldId.verifyAndPrepareClaim(dto.wallet, dto.identity, dto.idkitResponse);
+    return this.worldId.verifyAndPrepareClaim(
+      dto.wallet,
+      dto.identity,
+      dto.check ?? 'personhood',
+      dto.idkitResponse,
+    );
   }
 }
