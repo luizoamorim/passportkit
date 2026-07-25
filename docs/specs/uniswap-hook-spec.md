@@ -3,7 +3,9 @@
 > Surface #4 of PassportKit. A v4 hook that **gates swap + add-liquidity** by compliance, reusing `EligibilityGate.isEligible(identity, policyId)` — the same interface as the Deal Room. Track: **Best Uniswap Stack Contribution** ($3k, continuity-only).
 
 > **Status: implemented, as specified** — `contracts/src/hooks/ComplianceHook.sol`, tests in
-> `contracts/test/ComplianceHook.t.sol`, demo via `make hook-demo`. The hook resolves
+> `contracts/test/ComplianceHook.t.sol`, demo at **`/markets` in `apps/web`** (both pools, the
+> issuer controls and the tx inspector; driven by `/api/demo/world` + `/api/demo/markets`, which
+> need `DEMO_MODE=true` and a world deployed by `contracts/script/DeployAll.s.sol`). The hook resolves
 > `IdentityFactory.identityOfWallet(wallet)` and calls `EligibilityGate.isEligible(identity,
 > policyId)`; a pool's policy is the immutable `policyId` (repo-wide: `1` = Deal Room / KYC,
 > `2` = Investor / KYC + accredited). The revert carries the **gate's own** reason code
