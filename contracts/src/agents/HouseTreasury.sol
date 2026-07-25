@@ -152,4 +152,44 @@ contract HouseTreasury {
         SPEND_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
         emit Deposited(msg.sender, amount);
     }
+
+    // --- Payments (rail 2: above-threshold, owner-approved) ---
+
+    function proposePayment(address vendor, uint256 amount, bytes32 evidenceHash)
+        external
+        returns (uint256 id)
+    {
+        (bool ok,) = isAgentInGoodStanding(msg.sender);
+        if (!ok) revert NotAgent();
+        if (vendor == address(0)) revert ZeroAddress();
+        id = nextPaymentId++;
+        payments[id] = PendingPayment({
+            vendor: vendor,
+            amount: amount,
+            evidenceHash: evidenceHash,
+            approvals: 0,
+            executed: false
+        });
+        emit PaymentProposed(id, vendor, amount, evidenceHash);
+    }
+
+    function approvePayment(uint256 id) external onlyOwner {
+        PendingPayment storage p = payments[id];
+        if (p.vendor == address(0)) revert UnknownPayment();
+        if (p.executed) revert AlreadyExecuted();
+        if (approvedBy[id][msg.sender]) revert AlreadyApproved();
+        approvedBy[id][msg.sender] = true;
+        p.approvals++;
+        emit PaymentApproved(id, msg.sender, p.approvals);
+    }
+
+    function executePayment(uint256 id) external {
+        PendingPayment storage p = payments[id];
+        if (p.vendor == address(0)) revert UnknownPayment();
+        if (p.executed) revert AlreadyExecuted();
+        if (p.approvals < APPROVAL_THRESHOLD) revert ThresholdNotMet();
+        p.executed = true;
+        SPEND_TOKEN.safeTransfer(p.vendor, p.amount);
+        emit PaymentExecuted(id, p.vendor, p.amount);
+    }
 }

@@ -161,4 +161,80 @@ contract HouseTreasuryTest is Test {
         passport.revokePassport(ownerA);
         assertFalse(treasury.isCompliantOwner(ownerA));
     }
+
+    // --- payments (rail 2) ---
+
+    function _fundTreasury(uint256 amount) internal {
+        musd.mint(ownerA, amount);
+        vm.startPrank(ownerA);
+        musd.approve(address(treasury), amount);
+        treasury.deposit(amount);
+        vm.stopPrank();
+    }
+
+    function test_propose_requires_good_standing() public {
+        vm.prank(concierge);
+        vm.expectRevert(HouseTreasury.NotAgent.selector);
+        treasury.proposePayment(stranger, 1 ether, keccak256("evidence"));
+    }
+
+    function test_full_approval_flow_pays_vendor() public {
+        _grant();
+        _fundTreasury(5_000 ether);
+        vm.prank(concierge);
+        uint256 id = treasury.proposePayment(stranger, 4_500 ether, keccak256("roof"));
+
+        vm.prank(ownerA);
+        treasury.approvePayment(id);
+        vm.prank(ownerB);
+        treasury.approvePayment(id);
+        treasury.executePayment(id);
+
+        assertEq(musd.balanceOf(stranger), 4_500 ether);
+    }
+
+    function test_execute_before_threshold_reverts() public {
+        _grant();
+        _fundTreasury(5_000 ether);
+        vm.prank(concierge);
+        uint256 id = treasury.proposePayment(stranger, 100 ether, keccak256("e"));
+        vm.prank(ownerA);
+        treasury.approvePayment(id);
+        vm.expectRevert(HouseTreasury.ThresholdNotMet.selector);
+        treasury.executePayment(id);
+    }
+
+    function test_owner_cannot_double_approve() public {
+        _grant();
+        vm.prank(concierge);
+        uint256 id = treasury.proposePayment(stranger, 100 ether, keccak256("e"));
+        vm.startPrank(ownerA);
+        treasury.approvePayment(id);
+        vm.expectRevert(HouseTreasury.AlreadyApproved.selector);
+        treasury.approvePayment(id);
+        vm.stopPrank();
+    }
+
+    function test_cannot_execute_twice() public {
+        _grant();
+        _fundTreasury(1_000 ether);
+        vm.prank(concierge);
+        uint256 id = treasury.proposePayment(stranger, 100 ether, keccak256("e"));
+        vm.prank(ownerA);
+        treasury.approvePayment(id);
+        vm.prank(ownerB);
+        treasury.approvePayment(id);
+        treasury.executePayment(id);
+        vm.expectRevert(HouseTreasury.AlreadyExecuted.selector);
+        treasury.executePayment(id);
+    }
+
+    function test_kill_switch_blocks_new_proposals() public {
+        _grant();
+        vm.prank(admin);
+        passport.revokePassport(ownerA);
+        vm.prank(concierge);
+        vm.expectRevert(HouseTreasury.NotAgent.selector);
+        treasury.proposePayment(stranger, 1 ether, keccak256("e"));
+    }
 }
