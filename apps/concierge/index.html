@@ -241,6 +241,11 @@
 <script>
 const $ = (s) => document.querySelector(s);
 const short = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '—';
+// Everything the house does not author itself — ticket text, the decider's
+// rationale (an LLM's output when DECIDER=openai), refusal messages — goes
+// through here before it reaches innerHTML.
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let LOCAL = true;
 let EXPLORER = null;
 let BUSY = false;
@@ -277,13 +282,13 @@ function houseCard(s) {
 function agentCard(a) {
   const pill = a.standing.ok
     ? '<span class="badge ok">in good standing</span>'
-    : `<span class="badge no">${a.standing.reason ?? 'no standing'}</span>`;
+    : `<span class="badge no">${esc(a.standing.reason ?? 'no standing')}</span>`;
   return `<div class="card-top">
       <div><h2>Concierge</h2><p class="role">Autonomous house agent — holds no passport of its own</p></div>
       ${pill}
     </div>
     <div class="row"><span class="k">wallet</span><span class="v">${short(a.wallet)}</span></div>
-    <div class="row"><span class="k">standing reason</span><span class="v">${a.standing.ok ? '<span class="ok">✓ mandate live · owners compliant</span>' : `<span class="reason">${a.standing.reason}</span>`}</span></div>
+    <div class="row"><span class="k">standing reason</span><span class="v">${a.standing.ok ? '<span class="ok">✓ mandate live · owners compliant</span>' : `<span class="reason">${esc(a.standing.reason)}</span>`}</span></div>
     <div class="row"><span class="k">CASA budget</span><span class="v">${a.casa}</span></div>
     <div class="row"><span class="k">mUSD held</span><span class="v">${a.musd}</span></div>
     <div class="row"><span class="k">per-tx cap</span><span class="v">${a.perTxCap} mUSD</span></div>`;
@@ -310,13 +315,13 @@ function ticketRow(t) {
   const conf = t.decision ? ` · confidence ${Number(t.decision.confidence).toFixed(2)}` : '';
   return `<div class="ticket">
     <div class="head">
-      <span class="desc">${t.description}</span>
-      <span><span class="amt">${t.amount} mUSD</span> <span class="badge ${status}">${status}</span></span>
+      <span class="desc">${esc(t.description)}</span>
+      <span><span class="amt">${t.amount} mUSD</span> <span class="badge ${esc(status)}">${esc(status)}</span></span>
     </div>
-    <p class="why">${t.decision?.rationale ?? ''}${conf}</p>
-    ${t.refusal ? `<div class="refusal">${t.refusal.source === 'treasury' ? 'treasury' : 'hook'} refused: ${t.refusal.reason}${t.refusal.message ? ` — ${t.refusal.message}` : ''}</div>` : ''}
+    <p class="why">${esc(t.decision?.rationale ?? '')}${conf}</p>
+    ${t.refusal ? `<div class="refusal">${t.refusal.source === 'treasury' ? 'treasury' : 'hook'} refused: ${esc(t.refusal.reason)}${t.refusal.message ? ` — ${esc(t.refusal.message)}` : ''}</div>` : ''}
     <div class="meta">
-      <span>#${t.id} · ${t.category}</span>
+      <span>#${t.id} · ${esc(t.category)}</span>
       <span>evidence ${short(t.evidenceHash)}</span>
       ${t.paymentId ? `<span>payment #${t.paymentId}</span>` : ''}
       ${t.txHashes.length ? `<span>${txLinks(t.txHashes)}</span>` : ''}
@@ -388,58 +393,58 @@ window.submitTicket = () => act(async () => {
   const description = $('#t-desc').value.trim() || 'house ticket';
   const amount = $('#t-amount').value.trim();
   const category = $('#t-category').value;
-  log(`ticket: ${description} — ${amount} mUSD (${category}) → asking the concierge…`);
+  log(`ticket: ${esc(description)} — ${esc(amount)} mUSD (${esc(category)}) → asking the concierge…`);
   const r = await post('/api/ticket', { description, amount, category });
-  if (!r.ok) { log(`ticket <span class="bad">✗</span> ${r.message}`); return; }
+  if (!r.ok) { log(`ticket <span class="bad">✗</span> ${esc(r.message)}`); return; }
   const t = r.ticket;
   const tail = t.txHashes.length ? ` ${txLinks(t.txHashes)}` : '';
-  if (t.status === 'paid') log(`concierge <span class="good">paid</span> ${t.amount} mUSD — ${t.decision.rationale}${tail}`);
+  if (t.status === 'paid') log(`concierge <span class="good">paid</span> ${t.amount} mUSD — ${esc(t.decision.rationale)}${tail}`);
   else if (t.status === 'pending-approval') log(`concierge <span class="good">proposed</span> payment #${t.paymentId} (${t.amount} mUSD) — needs owner approval${tail}`);
-  else if (t.status === 'rejected') log(`concierge <span class="bad">rejected</span> the ticket — ${t.decision.rationale}`);
-  else if (t.status === 'refused') log(`chain <span class="bad">refused</span> — ${t.refusal.message}`);
-  else log(`ticket ${t.status}${tail}`);
+  else if (t.status === 'rejected') log(`concierge <span class="bad">rejected</span> the ticket — ${esc(t.decision.rationale)}`);
+  else if (t.status === 'refused') log(`chain <span class="bad">refused</span> — ${esc(t.refusal.message)}`);
+  else log(`ticket ${esc(t.status)}${tail}`);
 });
 
 window.approve = (owner, id) => act(async () => {
   const r = await post('/api/approve', { owner, id });
   if (r.ok) {
     log(`${owner} approved payment #${id} <span class="good">✓</span>${r.executed ? ' — threshold met, <b>executed</b>' : ''} ${txLinks(r.txHashes)}`);
-  } else log(`${owner} approve #${id} <span class="bad">✗</span> ${r.message}`);
+  } else log(`${owner} approve #${id} <span class="bad">✗</span> ${esc(r.message)}`);
 });
 
 window.fund = () => act(async () => {
   const r = await post('/api/fund', { amount: '500' });
   if (r.ok) log(`owners funded the concierge with 500 CASA <span class="good">✓</span> ${txLinks(r.txHashes)}`);
-  else log(`fund <span class="bad">✗</span> ${r.message}`);
+  else log(`fund <span class="bad">✗</span> ${esc(r.message)}`);
 });
 
 window.revokeMandate = () => act(async () => {
   const r = await post('/api/revoke-mandate', {});
   if (r.ok) log(`owner revoked the mandate <span class="good">✓</span> — the pool will refuse the agent ${txLinks(r.txHashes)}`);
-  else log(`revoke mandate <span class="bad">✗</span> ${r.message}`);
+  else log(`revoke mandate <span class="bad">✗</span> ${esc(r.message)}`);
 });
 
 window.grantMandate = () => act(async () => {
   const r = await post('/api/grant-mandate', {});
   if (r.ok) log(`owner granted the mandate (200 mUSD per tx, 1 year) <span class="good">✓</span> ${txLinks(r.txHashes)}`);
-  else log(`grant mandate <span class="bad">✗</span> ${r.message}`);
+  else log(`grant mandate <span class="bad">✗</span> ${esc(r.message)}`);
 });
 
 window.revokeKyc = (owner) => act(async () => {
   const r = await post('/api/revoke-owner-kyc', { owner });
   if (r.ok) log(`issuer: revoked ${owner}'s KYC claim <span class="good">✓</span> — agent standing follows ${txLinks(r.txHashes)}`);
-  else log(`revoke KYC of ${owner} <span class="bad">✗</span> ${r.message}`);
+  else log(`revoke KYC of ${owner} <span class="bad">✗</span> ${esc(r.message)}`);
 });
 
 window.restoreKyc = (owner) => act(async () => {
   const r = await post('/api/restore-owner-kyc', { owner });
   if (r.ok) log(`CRE: restored ${owner}'s KYC claim <span class="good">✓</span> ${txLinks(r.txHashes)}`);
-  else log(`restore KYC of ${owner} <span class="bad">✗</span> ${r.message}`);
+  else log(`restore KYC of ${owner} <span class="bad">✗</span> ${esc(r.message)}`);
 });
 
 window.timewarp = async () => {
   const r = await post('/api/timewarp', { days: 366 });
-  log(r.ok ? `world: fast-forwarded ${r.warpedDays} days <span class="good">✓</span>` : `timewarp <span class="bad">✗</span> ${r.message}`);
+  log(r.ok ? `world: fast-forwarded ${r.warpedDays} days <span class="good">✓</span>` : `timewarp <span class="bad">✗</span> ${esc(r.message)}`);
   render();
 };
 
@@ -449,7 +454,7 @@ window.resetWorld = async () => {
   if (r.ok) {
     $('#log').innerHTML = '';
     log('world: reset <span class="good">✓</span> fresh chain, fresh contracts, clock back to today');
-  } else log(`reset <span class="bad">✗</span> ${r.message}`);
+  } else log(`reset <span class="bad">✗</span> ${esc(r.message)}`);
   render();
 };
 
@@ -460,15 +465,15 @@ window.inspect = async (hash) => {
   $('#drawer-content').innerHTML = `<h2>Transaction</h2><p class="hash">${hash}</p><p style="color:var(--muted)">loading…</p>`;
   const r = await fetch('/api/tx/' + hash).then((x) => x.json());
   if (!r.ok) {
-    $('#drawer-content').innerHTML = `<h2>Transaction</h2><p class="hash">${hash}</p><p class="status-bad">${r.message}</p>`;
+    $('#drawer-content').innerHTML = `<h2>Transaction</h2><p class="hash">${hash}</p><p class="status-bad">${esc(r.message)}</p>`;
     return;
   }
   const events = r.logs.map((l) => `
     <div class="evt">
-      <div class="head"><span>${l.name}</span><span class="c">${l.contract}</span></div>
+      <div class="head"><span>${esc(l.name)}</span><span class="c">${esc(l.contract)}</span></div>
       ${l.args ? Object.entries(l.args).map(([k, v]) =>
-        `<div class="arg"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('') :
-        `<div class="arg"><span class="k">topic</span><span class="v">${l.topic ?? ''}</span></div>`}
+        `<div class="arg"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('') :
+        `<div class="arg"><span class="k">topic</span><span class="v">${esc(l.topic ?? '')}</span></div>`}
     </div>`).join('');
   $('#drawer-content').innerHTML = `
     <h2>Transaction</h2>

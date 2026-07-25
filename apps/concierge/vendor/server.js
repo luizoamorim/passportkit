@@ -65,7 +65,9 @@ function paymentRequired(res, { tokenAddress, vendorAddress, amount }) {
 // header gets a 402 challenge; retrying with X-PAYMENT: {"txHash"} gets the
 // tx verified (via `verify`, or the RPC default) and, if it pays out,
 // resolves 200 {paid: true, jobId}. Everything else is a plain 404.
-export function createVendorServer({ port, vendorAddress, tokenAddress, rpcUrl, verify }) {
+// Binds loopback unless `host` says otherwise — this is a demo endpoint with
+// no authentication in front of it.
+export function createVendorServer({ port, host, vendorAddress, tokenAddress, rpcUrl, verify }) {
   const verifyPayment = verify ?? makeDefaultVerifier({ tokenAddress, vendorAddress, rpcUrl });
 
   const server = http.createServer(async (req, res) => {
@@ -106,7 +108,7 @@ export function createVendorServer({ port, vendorAddress, tokenAddress, rpcUrl, 
     sendJson(res, 404, { error: 'not found' });
   });
 
-  server.listen(port);
+  server.listen(port, host ?? '127.0.0.1');
   return server;
 }
 
@@ -114,6 +116,7 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   createVendorServer({
     port: Number(process.env.PORT_VENDOR ?? 4191),
+    host: process.env.BIND_HOST ?? '127.0.0.1',
     vendorAddress: process.env.VENDOR_ADDRESS,
     tokenAddress: process.env.TOKEN_ADDRESS,
     rpcUrl: process.env.RPC_URL ?? 'http://127.0.0.1:8545',

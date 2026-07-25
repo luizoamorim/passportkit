@@ -44,6 +44,9 @@ const ENV = {
 };
 const RPC_URL = ENV.RPC_URL ?? 'http://127.0.0.1:8545';
 const PORT = Number(ENV.PORT ?? 4190);
+// Loopback by default: every mutating route here is unauthenticated and spends
+// the demo's funded keys, so a wider bind hands the wallet to the whole LAN.
+const HOST = ENV.BIND_HOST ?? '127.0.0.1';
 const VENDOR_PORT = Number(ENV.PORT_VENDOR ?? 4191);
 const VENDOR_URL = `http://127.0.0.1:${VENDOR_PORT}`;
 const EXPLORER_URL = (ENV.EXPLORER_URL ?? '').replace(/\/$/, '') || null;
@@ -989,7 +992,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`[concierge] House Concierge demo on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`[concierge] House Concierge demo on http://${HOST}:${PORT}`);
   console.log(`[concierge] mock plumber (x402) on ${VENDOR_URL}`);
 });
