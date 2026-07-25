@@ -4,24 +4,38 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {IAccessGate} from "../interfaces/IAccessGate.sol";
 import {HouseToken} from "./HouseToken.sol";
+
+/// Minimal view of the decision core — the treasury adds zero eligibility logic of its own.
+interface IEligibilityGate {
+    function isEligible(address identity, uint256 policyId) external view returns (bool ok, bytes32 reason);
+}
+
+/// Minimal view of the IdentityFactory: wallet (person OR agent) -> Identity contract.
+interface IIdentityResolver {
+    function identityOfWallet(address wallet) external view returns (address);
+}
 
 /**
  * @title HouseTreasury
  * @notice Governance spine of a house: owners, the concierge's mandate, the
  *         above-threshold approval queue, and funding of the concierge's CASA budget.
  *
- * The concierge never holds a passport. Its authority derives from the owners:
- * isAgentInGoodStanding re-checks every owner against AccessGate live, so revoking
- * one owner's KYC instantly cuts the agent off everywhere this view is consulted.
+ * The concierge holds no claims of its own. Its authority derives from the owners:
+ * isAgentInGoodStanding re-checks every owner against the EligibilityGate live, so the
+ * issuer revoking one owner's KYC instantly cuts the agent off everywhere this view is
+ * consulted. A wallet is resolved to its Identity through the IdentityFactory, exactly
+ * as ComplianceHook does — one decision core, one answer, every surface.
+ *
+ * The house's owner policy is the immutable `POLICY_ID`; which topics that requires lives
+ * in the gate (`EligibilityGate.setPolicy`). Repo-wide: policy 1 = Deal Room (KYC).
  */
 contract HouseTreasury {
     using SafeERC20 for IERC20;
 
     error NotOwner();
     error NotAgent();
-    /// @notice An owner whose passport no longer passes AccessGate tried to act.
+    /// @notice An owner whose identity no longer clears the gate's policy tried to act.
     error NotCompliantOwner();
     error NoMandate();
     error ZeroAddress();
@@ -60,7 +74,9 @@ contract HouseTreasury {
     }
 
     IERC20 public immutable SPEND_TOKEN;
-    IAccessGate public immutable ACCESS_GATE;
+    IEligibilityGate public immutable ELIGIBILITY_GATE;
+    IIdentityResolver public immutable IDENTITY_RESOLVER; // wallet -> identity
+    uint256 public immutable POLICY_ID;
     HouseToken public immutable HOUSE_TOKEN;
 
     address[] public owners;
@@ -81,7 +97,9 @@ contract HouseTreasury {
         address[] memory owners_,
         uint256 approvalThreshold_,
         IERC20 spendToken,
-        IAccessGate gate,
+        IEligibilityGate gate,
+        IIdentityResolver resolver,
+        uint256 policyId,
         string memory tokenName,
         string memory tokenSymbol
     ) {
@@ -95,7 +113,9 @@ contract HouseTreasury {
         }
         APPROVAL_THRESHOLD = approvalThreshold_;
         SPEND_TOKEN = spendToken;
-        ACCESS_GATE = gate;
+        ELIGIBILITY_GATE = gate;
+        IDENTITY_RESOLVER = resolver;
+        POLICY_ID = policyId;
         HOUSE_TOKEN = new HouseToken(tokenName, tokenSymbol, address(this));
     }
 
@@ -122,13 +142,13 @@ contract HouseTreasury {
         if (mandate.revoked) return (false, "MANDATE_REVOKED");
         if (mandate.expiresAt != 0 && block.timestamp > mandate.expiresAt) return (false, "MANDATE_EXPIRED");
         for (uint256 i = 0; i < owners.length; i++) {
-            if (!ACCESS_GATE.canAccessDealRoom(owners[i])) return (false, "OWNER_NOT_COMPLIANT");
+            if (!_isEligible(owners[i])) return (false, "OWNER_NOT_COMPLIANT");
         }
         return (true, bytes32(0));
     }
 
     function isCompliantOwner(address wallet) public view returns (bool) {
-        return isOwner[wallet] && ACCESS_GATE.canAccessDealRoom(wallet);
+        return isOwner[wallet] && _isEligible(wallet);
     }
 
     function agentPerTxCap() external view returns (uint256) {
@@ -183,8 +203,8 @@ contract HouseTreasury {
         emit PaymentProposed(id, vendor, amount, evidenceHash);
     }
 
-    /// @notice Approvals re-read the approver's live AccessGate status, so a revoked
-    ///         owner cannot push a queued payment over the threshold.
+    /// @notice Approvals re-read the approver's live eligibility, so an owner the issuer
+    ///         revoked cannot push a queued payment over the threshold.
     function approvePayment(uint256 id) external onlyOwner {
         if (!isCompliantOwner(msg.sender)) revert NotCompliantOwner();
         PendingPayment storage p = payments[id];
@@ -204,5 +224,16 @@ contract HouseTreasury {
         p.executed = true;
         SPEND_TOKEN.safeTransfer(p.vendor, p.amount);
         emit PaymentExecuted(id, p.vendor, p.amount);
+    }
+
+    // --- Internal ---
+
+    /// @dev The one eligibility read: resolve the wallet's identity, then ask the gate.
+    ///      An unknown wallet has no identity and can never clear the house's policy.
+    function _isEligible(address wallet) internal view returns (bool) {
+        address identity = IDENTITY_RESOLVER.identityOfWallet(wallet);
+        if (identity == address(0)) return false;
+        (bool ok,) = ELIGIBILITY_GATE.isEligible(identity, POLICY_ID);
+        return ok;
     }
 }
