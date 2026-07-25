@@ -2,15 +2,14 @@
 
 > Surface #4 of PassportKit. A v4 hook that **gates swap + add-liquidity** by compliance, reusing `EligibilityGate.isEligible(identity, policyId)` — the same interface as the Deal Room. Track: **Best Uniswap Stack Contribution** ($3k, continuity-only).
 
-> **Status: implemented** — `contracts/src/hooks/ComplianceHook.sol`, tests in
-> `contracts/test/ComplianceHook.t.sol`, demo via `make hook-demo`. One design delta
-> vs. this spec: the shipped contracts have no `EligibilityGate`/`identityOfWallet` —
-> the wallet *is* the identity and the decision point is **AccessGate**, so the hook
-> takes a `Policy` (`DEAL_ROOM` → `canAccessDealRoom`, `INVESTOR_AREA` →
-> `canAccessInvestorArea`) and derives revert reason codes (`KYC_MISSING`,
-> `KYC_EXPIRED`, `KYC_FAILED`, `PASSPORT_REVOKED`, `ACCREDITATION_MISSING`, …) from
-> ClaimRegistry + CompliancePassport, advisory-only. Everything else below holds:
-> exit is ungated, actor via hookData (§3.1 limitation stands), address mining per §3.2.
+> **Status: implemented, as specified** — `contracts/src/hooks/ComplianceHook.sol`, tests in
+> `contracts/test/ComplianceHook.t.sol`, demo via `make hook-demo`. The hook resolves
+> `IdentityFactory.identityOfWallet(wallet)` and calls `EligibilityGate.isEligible(identity,
+> policyId)`; a pool's policy is the immutable `policyId` (repo-wide: `1` = Deal Room / KYC,
+> `2` = Investor / KYC + accredited). The revert carries the **gate's own** reason code
+> (`MISSING_KYC`, `MISSING_ACCREDITED`, `NO_POLICY`, …), plus `NO_IDENTITY` for a wallet the
+> resolver doesn't know — no reason logic of its own. Exit is ungated, actor via hookData
+> (§3.1 limitation stands), address mining per §3.2.
 
 ---
 
@@ -125,9 +124,10 @@ contract ComplianceHook is BaseHook {
 
 ## 5. Demo (WOW)
 ```
-v4 pool with ComplianceHook, policyId = KYC + PROOF_OF_PERSONHOOD
-1) Wallet WITHOUT passport tries to swap    → revert NotCompliant(reason)
-2) Same wallet does WorldID + KYC           → claim on the Identity
-3) Tries to swap again                       → passes ✅
+v4 pool with ComplianceHook, policyId = 1 (KYC_VERIFIED)
+1) Wallet with no valid claim tries to swap  → revert NotCompliant(MISSING_KYC)
+2) Issuer signs a KYC claim, holder submits  → claim on the Identity
+3) Tries to swap again                        → passes ✅
+4) Issuer setRevoked(identity, KYC, true)     → refused again (the money moment)
 ```
 "A Uniswap pool only verified, compliant humans can trade in." Ties World + onchain-id + Uniswap into one scene.
