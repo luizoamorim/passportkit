@@ -25,7 +25,7 @@
 - **Frontend screens:** identity + World + passport, deal-room gate, agent-link. _(No `/admin` screen for the demo — tenant setup is a one-time ops step; in-app admin console is roadmap, see §3a.)_
 - **World ID:** real IDKit integration (Rafael) — **mock for now**.
 - **Agent linking:** on-chain wiring + endpoint (Noé).
-- **Ops:** register + wrap `passportkit.eth` on Sepolia, point its resolver to `PassportResolver`, set `ENS_PARENT_NODE` so the deploy wires the tenant, run deploy, post-deploy `setApprovalForAll(registrar)`, fill `.env` from `deployments/<chainid>.json`.
+- **Ops (split):** **Noé** registers + wraps `passportkit.eth` and points its resolver to `PassportResolver` (+ post-deploy `setApprovalForAll(registrar)` from the owner wallet); **Luiz** sets `ENS_PARENT_NODE` (Noé's namehash), runs the deploy (wires the tenant), fills `.env` from `deployments/<chainid>.json`.
 
 ---
 
@@ -90,10 +90,10 @@ graph TD
 
 For the demo we register **one** parent name, `passportkit.eth`, up front and wire it once. **There is no `/admin` screen** — the deploy script does the tenant wiring. All test identities hang **below** `passportkit.eth` as subnames (`alice.passportkit.eth`); agents get subnames too.
 
-1. Register + wrap `passportkit.eth` on the ENS app (Sepolia), owned by the ops wallet.
-2. Point its resolver to `PassportResolver` (`setResolver`).
-3. Set `ENS_PARENT_NODE` (namehash of `passportkit.eth`) in `contracts/.env` → `DeployPassportKit.s.sol` calls `resolver.setTenant(parentNode, gate, policyId, registrar)` automatically at deploy time.
-4. Post-deploy (ops wallet): `NameWrapper.setApprovalForAll(registrar, true)` so the registrar can mint subnames.
+1. **(Noé)** Register + wrap `passportkit.eth` on the ENS app (Sepolia) — the registering wallet owns it (the tenant owner).
+2. **(Noé)** Point its resolver to `PassportResolver` (`setResolver`), and share the namehash with Luiz.
+3. **(Luiz)** Set `ENS_PARENT_NODE` (namehash of `passportkit.eth`) in `contracts/.env` → `DeployPassportKit.s.sol` calls `resolver.setTenant(parentNode, gate, policyId, registrar)` automatically at deploy time.
+4. **(Noé, name owner)** Post-deploy: `NameWrapper.setApprovalForAll(registrar, true)` so the registrar can mint subnames.
 
 > **Roadmap (not built for the demo):** an in-app **admin console** where a tenant self-serves this — register a name, pick a policy, wire the tenant from the UI. For the demo it's a scripted ops step; we present the console as the productization path.
 
@@ -204,9 +204,10 @@ sequenceDiagram
 - **Subgraph:** index `IdentityCreated`, `AgentLinked`/`AgentUnlinked`, ClaimIssuer revocation events, `GatedERC20 Transfer`; feed it the deployed addresses + `startBlock` from `deployments/<chainid>.json`.
 - **Agent identity:** `POST /identity/link-agent` (+ `unlink`) backend endpoint (AGENT_ROLE → `IdentityFactory.linkAgent`, mirror the just-built `POST /identity/create`); `registrar.issueSubname` path for agent subnames; frontend "My Agents" wiring.
 - **The show:** the live view / graph that makes the revoke-cascade visible.
+- **ENS parent name (you own it):** register + wrap `passportkit.eth` on Sepolia and point its resolver to `PassportResolver` (`setResolver`); after the deploy, `NameWrapper.setApprovalForAll(registrar, true)` (must come from the name-owner wallet — that's you). ⚠️ Whoever registers it becomes the tenant owner — **agree the wallet with Luiz first**, then share the name's **namehash** with Luiz for `ENS_PARENT_NODE`.
 
 ### Luiz Henrique — Ops + glue (this afternoon; Rafael & Noé do NOT wait on this)
-- **Tenant + deploy (Sepolia):** register + wrap `passportkit.eth`, point its resolver to `PassportResolver`; set `ENS_PARENT_NODE` in `contracts/.env` so `DeployPassportKit.s.sol` wires `setTenant` automatically; run the deploy; post-deploy `NameWrapper.setApprovalForAll(registrar, true)`; copy `deployments/11155111.json` into api + web `.env` and the subgraph manifest.
+- **Deploy (Sepolia):** set `ENS_PARENT_NODE` (the `passportkit.eth` namehash from Noé) in `contracts/.env` so `DeployPassportKit.s.sol` wires `setTenant` automatically; run the deploy; copy `deployments/11155111.json` into api + web `.env` and the subgraph manifest. _(ENS name registration + resolver + subname approval are Noé's — see his lane.)_
 - **Backend `POST /identity/create`:** ✅ already built (`feature/backend-identity-create`) — just needs the deployed factory address in `.env`.
 - **Decide** the personhood-policy question (§5) — default already wired, just confirm/flip.
 - Demo script + fallbacks.
