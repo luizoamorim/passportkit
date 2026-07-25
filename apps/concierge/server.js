@@ -656,7 +656,12 @@ async function doTicket({ description, amount, category }) {
   const vendor = actorAddress.plumber;
 
   const ticket = { id, description, vendor, amount: amountWei, category };
-  const context = { perTxCap: await readPerTxCap(), casaBudget: await readCasaBudget() };
+  // Rail 1 sells CASA for *exactly* the invoice in mUSD, so it spends a little
+  // more CASA than the invoice (0.3% pool fee + price impact). Hand the decider
+  // a 2% haircut on the raw balance, or a ticket sitting just under the budget
+  // decides 'pay' and then reverts on the swap with ERC20InsufficientBalance.
+  const casaBalance = await readCasaBudget();
+  const context = { perTxCap: await readPerTxCap(), casaBudget: (casaBalance * 98n) / 100n };
   const decision = await decide(ticket, context);
   const hash = evidenceHash(decision);
 
