@@ -11,7 +11,7 @@
 > `contracts/src/hooks/MandateHook.sol`, demo at **`/concierge` in `apps/web`** (house
 > header, agent standing, owner KYC controls, ticket composer + feed, approval queue and
 > the tx inspector; driven by `/api/demo/world` + `/api/demo/concierge` with the mock x402
-> vendor at `/api/demo/vendor`, all of which need `DEMO_MODE=true` and a world deployed by
+> vendor at `/api/demo/vendor/invoice`, all of which need `DEMO_MODE=true` and a world deployed by
 > `contracts/script/DeployAll.s.sol`). **Run it: `make demo` → http://localhost:3003/concierge.**
 > §5 and §6 below described a standalone node service on its own port; that service was folded
 > into `apps/web` and deleted, so the runtime is now route handlers and the UI is a route —
