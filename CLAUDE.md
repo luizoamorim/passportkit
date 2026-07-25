@@ -27,6 +27,7 @@ An Identity is not only for a person. A person can spawn an **x402 agent** that 
 - Solidity `^0.8.24` (solc 0.8.24), **Apache-2.0**, OpenZeppelin v5 (`@openzeppelin/contracts/...`), forge-std. **ASCII-only in string literals** (solc rejects unicode).
 - Run the contract tests with `forge test` (the legacy PassportCreds contracts + tests were removed).
 - Specs: `docs/specs/`. Vibe-coding prompts: `docs/prompts/`.
+- **React is pinned repo-wide to 18.3.1** by the root `overrides` — `apps/web` (Next 14) breaks at prerender if the React 19 that `apps/api`'s `prisma` pulls in wins the hoist. npm never writes `overrides` into `package-lock.json`, so editing them is invisible to `npm install`: you must also drop the stale `react`/`react-dom` lock entries (or the whole lockfile) and re-resolve. Check with `node -p "require('./node_modules/react/package.json').version"` → `18.3.1`.
 
 ## Git workflow — IMPORTANT (multiple agents work this repo)
 - **Multiple Claude agents run CONCURRENTLY on this repo.** ALWAYS run `git branch --show-current` right before committing/pushing — the branch can change under you.
