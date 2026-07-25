@@ -76,6 +76,9 @@ async function openaiDecide(ticket, context, opts) {
           },
         ],
       }),
+      // A hung endpoint must not hang the ticket: aborting drops into the
+      // catch below, which answers from the mock rules.
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 15000),
     });
 
     if (!res.ok) throw new Error(`openai request failed: ${res.status}`);

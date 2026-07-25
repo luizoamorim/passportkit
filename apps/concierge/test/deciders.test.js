@@ -96,6 +96,30 @@ test('openai decider falls back to mock on network error', async (t2) => {
   assert.match(d.rationale, / \(fallback: mock rules\)$/);
 });
 
+test('openai decider falls back to mock when the endpoint hangs past the timeout', async (t2) => {
+  const originalFetch = globalThis.fetch;
+  let sentSignal = null;
+  // Never resolves on its own — only the request's own abort signal ends it,
+  // exactly like a real endpoint that stopped answering.
+  globalThis.fetch = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      sentSignal = init.signal;
+      init.signal.addEventListener('abort', () => reject(init.signal.reason));
+    });
+  // AbortSignal.timeout's timer is unref'd: with a stubbed fetch there is
+  // nothing else pending, so the loop would drain before it fires. The real
+  // server is held open by its HTTP listener; this stands in for that.
+  const keepAlive = setInterval(() => {}, 5);
+  t2.after(() => { globalThis.fetch = originalFetch; clearInterval(keepAlive); });
+
+  const decide = makeDecider('openai', { baseUrl: 'https://api.example.com/v1', model: 'gpt-test', timeoutMs: 25 });
+  const d = await decide(t(120), ctx);
+  assert.ok(sentSignal instanceof AbortSignal, 'the request must carry an abort signal');
+  assert.equal(sentSignal.aborted, true);
+  assert.equal(d.action, 'pay');
+  assert.match(d.rationale, / \(fallback: mock rules\)$/);
+});
+
 test('openai decider falls back to mock on a non-OK HTTP response', async (t2) => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });

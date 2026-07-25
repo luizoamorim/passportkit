@@ -55,8 +55,8 @@
 
   .badge { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
   .badge.ok, .badge.pay, .badge.paid, .badge.executed { background: var(--green-bg); color: var(--green); }
-  .badge.propose, .badge.pending-approval { background: var(--amber-bg); color: var(--amber); }
-  .badge.no, .badge.reject, .badge.rejected, .badge.refused, .badge.unsettled { background: var(--red-bg); color: var(--red); }
+  .badge.propose, .badge.pending-approval, .badge.unsettled { background: var(--amber-bg); color: var(--amber); }
+  .badge.no, .badge.reject, .badge.rejected, .badge.refused { background: var(--red-bg); color: var(--red); }
   .badge.neutral { background: #EEF0F4; color: var(--muted); }
 
   .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #F1F3F7; font-size: 12.5px; }
@@ -96,6 +96,7 @@
   .ticket .meta a { color: var(--cyan); cursor: pointer; text-decoration: underline dotted; }
   .ticket .meta a.ext { text-decoration: none; }
   .ticket .refusal { margin-top: 6px; font: 500 11px var(--mono); color: var(--red); }
+  .ticket .unpaid { margin-top: 6px; font: 500 11px var(--mono); color: var(--amber); }
   .empty { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; }
 
   /* approval queue */
@@ -225,7 +226,7 @@
       <li><b>Roof repair — 4500 mUSD</b> → over the cap: <code>proposePayment</code> with the decision's <b>evidence hash</b>. Approve as operator, then as ana → the treasury executes.</li>
       <li><b>A 'jewelry' ticket</b> → rejected before any chain call. The rationale is recorded either way.</li>
       <li><b>Revoke Ana's KYC</b> → the agent's standing flips to <code>OWNER_NOT_COMPLIANT</code> and the next ticket is refused by the hook. Restore it → the agent is back.</li>
-      <li><b>Revoke the mandate</b> → <code>MANDATE_REVOKED</code>. The brake is one owner and one transaction.</li>
+      <li><b>Revoke the mandate</b> → <code>MANDATE_REVOKED</code>, until an owner re-grants it. The brake is one owner and one transaction.</li>
       <li>Click any <b>tx hash</b> — decoded events, straight from the chain.</li>
     </ol>
   </details>
@@ -309,6 +310,10 @@ function ownersCard(owners) {
     </div>${rows}`;
 }
 
+// A settled swap with an unpaid vendor is its own outcome, not a refusal —
+// the money already left the agent's CASA.
+const STATUS_LABEL = { unsettled: 'unsettled — swap done, vendor unpaid' };
+
 function ticketRow(t) {
   const action = t.decision?.action ?? '—';
   const status = t.status ?? action;
@@ -316,10 +321,11 @@ function ticketRow(t) {
   return `<div class="ticket">
     <div class="head">
       <span class="desc">${esc(t.description)}</span>
-      <span><span class="amt">${t.amount} mUSD</span> <span class="badge ${esc(status)}">${esc(status)}</span></span>
+      <span><span class="amt">${t.amount} mUSD</span> <span class="badge ${esc(status)}">${esc(STATUS_LABEL[status] ?? status)}</span></span>
     </div>
     <p class="why">${esc(t.decision?.rationale ?? '')}${conf}</p>
     ${t.refusal ? `<div class="refusal">${t.refusal.source === 'treasury' ? 'treasury' : 'hook'} refused: ${esc(t.refusal.reason)}${t.refusal.message ? ` — ${esc(t.refusal.message)}` : ''}</div>` : ''}
+    ${t.settleError ? `<div class="unpaid">swap settled, vendor unpaid: ${esc(t.settleError)}</div>` : ''}
     <div class="meta">
       <span>#${t.id} · ${esc(t.category)}</span>
       <span>evidence ${short(t.evidenceHash)}</span>
@@ -395,13 +401,15 @@ window.submitTicket = () => act(async () => {
   const category = $('#t-category').value;
   log(`ticket: ${esc(description)} — ${esc(amount)} mUSD (${esc(category)}) → asking the concierge…`);
   const r = await post('/api/ticket', { description, amount, category });
-  if (!r.ok) { log(`ticket <span class="bad">✗</span> ${esc(r.message)}`); return; }
+  // an 'unsettled' ticket comes back ok:false but with a record to show
+  if (!r.ticket) { log(`ticket <span class="bad">✗</span> ${esc(r.message)}`); return; }
   const t = r.ticket;
   const tail = t.txHashes.length ? ` ${txLinks(t.txHashes)}` : '';
   if (t.status === 'paid') log(`concierge <span class="good">paid</span> ${t.amount} mUSD — ${esc(t.decision.rationale)}${tail}`);
   else if (t.status === 'pending-approval') log(`concierge <span class="good">proposed</span> payment #${t.paymentId} (${t.amount} mUSD) — needs owner approval${tail}`);
   else if (t.status === 'rejected') log(`concierge <span class="bad">rejected</span> the ticket — ${esc(t.decision.rationale)}`);
   else if (t.status === 'refused') log(`chain <span class="bad">refused</span> — ${esc(t.refusal.message)}`);
+  else if (t.status === 'unsettled') log(`swap done, vendor <span class="bad">unpaid</span> — ${esc(t.settleError ?? '')}${tail}`);
   else log(`ticket ${esc(t.status)}${tail}`);
 });
 

@@ -671,7 +671,9 @@ async function doTicket({ description, amount, category }) {
   const casaBalance = await readCasaBudget();
   const context = { perTxCap: await readPerTxCap(), casaBudget: (casaBalance * 98n) / 100n };
   const decision = await decide(ticket, context);
-  const hash = evidenceHash(decision);
+  // The evidence must commit to the *request*, not just the verdict: a hash of
+  // the decision alone could be replayed against a different ticket.
+  const hash = evidenceHash({ ...decision, ticket: { ...ticket, amount: amountWei.toString() } });
 
   const record = {
     id,
@@ -683,6 +685,7 @@ async function doTicket({ description, amount, category }) {
     evidenceHash: hash,
     txHashes: [],
     refusal: null,
+    settleError: null,
     paid: false,
     paymentId: null,
     status: decision.action,
@@ -690,14 +693,33 @@ async function doTicket({ description, amount, category }) {
   };
   tickets.push(record);
 
-  try {
-    if (decision.action === 'pay') {
+  // Rail 1's two legs fail differently, so they do not share a catch: once the
+  // swap lands the agent already holds the mUSD, and a settlement failure after
+  // that is 'unsettled' (money moved, vendor unpaid) — not 'refused', which
+  // means the chain stopped the agent before it spent anything.
+  if (decision.action === 'pay') {
+    try {
       record.txHashes.push(await swapForInvoice(amountWei));
+    } catch (err) {
+      record.refusal = await refusalWithStanding(err);
+      record.status = 'refused';
+      return { ok: true, ticket: record };
+    }
+
+    try {
       const settled = await payInvoice(id, amountWei);
       if (settled.txHash) record.txHashes.push(settled.txHash);
       record.paid = settled.paid;
-      record.status = settled.paid ? 'paid' : 'unsettled';
-    } else if (decision.action === 'propose') {
+      if (!settled.paid) record.settleError = settled.error ?? 'vendor did not confirm the payment';
+    } catch (err) {
+      record.settleError = String(err?.shortMessage ?? err?.message ?? err).slice(0, 300);
+    }
+    record.status = record.paid ? 'paid' : 'unsettled';
+    return record.paid ? { ok: true, ticket: record } : { ok: false, status: 'unsettled', ticket: record };
+  }
+
+  try {
+    if (decision.action === 'propose') {
       const { hash: txHash, result } = await send('concierge', A.treasury, TREASURY_ABI, 'proposePayment', [
         vendor,
         amountWei,

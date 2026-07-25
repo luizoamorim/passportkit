@@ -76,7 +76,8 @@ concierge's **routine budget = its CASA balance** — a hard, visible, onchain c
 The governance spine. Holds the house's mUSD; deploys/owns its `HouseToken`.
 
 State: `owners[]`, `approvalThreshold` (m-of-n), `mandate` (agent address, `perTxCap`,
-`expiresAt`, `revoked`), pending payments queue, daily accounting.
+`expiresAt`, `revoked`), pending payments queue. The spending controls are the
+per-transaction cap and the agent's CASA budget — there is no daily accounting.
 
 Functions (shape):
 - `fundConcierge(casaAmount)` — owner-only: mints CASA to the agent (top-up of the
@@ -154,7 +155,7 @@ flow), on-chain log.
 
 Scripted beats: €120 faucet auto-paid (rail 1) → €4,500 roof queued + approved
 (rail 2) → budget exhaustion → **owner-KYC-revoke kill-switch** → restore → mandate
-revoke (permanent).
+revoke (until re-granted).
 
 ## 7. Testing
 
