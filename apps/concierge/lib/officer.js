@@ -195,38 +195,44 @@ export function assembleBlastRadius(data, { issuer }) {
 
 export function assembleAuditTrail(data, { wallet }) {
   const w = data.wallet;
+  const id = w ? w.identity : null;
   const events = [];
   const push = (timestamp, line, txHash) =>
     events.push({ timestamp: Number(timestamp), line, txHash: txHash ?? null });
 
-  if (!w || !w.identity) {
-    return {
-      interpretation: `Every indexed event touching wallet ${wallet}`,
-      summary: `No identity is linked to wallet ${short(wallet)} — nothing on record beyond token transfers.`,
-      lines: [],
-      facts: { wallet, identity: null, events: 0 },
-    };
+  if (id) {
+    push(id.createdAt, `IDENTITY created for wallet ${short(id.wallet)} → ${short(id.id)}`, id.createdTx);
+    for (const e of id.claimEvents ?? []) {
+      const verb =
+        e.kind === 'ADDED' ? 'claim ADDED' :
+        e.kind === 'REMOVED' ? 'claim REMOVED by holder' :
+        e.kind === 'LATCH_ON' ? 'REVOKED by issuer (latch ON)' : 'latch OFF (issuer re-opened)';
+      push(e.timestamp, `CLAIM ${e.topicName}: ${verb}`, e.txHash);
+    }
+    for (const s of id.snapshots ?? []) {
+      push(
+        s.timestamp,
+        `GATE policy #${s.policy.id}: ${s.eligible ? 'ELIGIBLE' : `REFUSED (${s.reason})`} — after ${s.trigger}`,
+        s.txHash,
+      );
+    }
   }
 
-  const id = w.identity;
-  push(id.createdAt, `IDENTITY created for wallet ${short(id.wallet)} → ${short(id.id)}`, id.createdTx);
-  for (const e of id.claimEvents ?? []) {
-    const verb =
-      e.kind === 'ADDED' ? 'claim ADDED' :
-      e.kind === 'REMOVED' ? 'claim REMOVED by holder' :
-      e.kind === 'LATCH_ON' ? 'REVOKED by issuer (latch ON)' : 'latch OFF (issuer re-opened)';
-    push(e.timestamp, `CLAIM ${e.topicName}: ${verb}`, e.txHash);
+  // Agent events flow in from BOTH sides — this wallet acting as an agent
+  // (top-level) and the identity's own agents (derived field). For an agent
+  // wallet the two sets overlap, so dedupe by event id.
+  const agentEvents = new Map();
+  const agentSources = [...((id && id.agentEvents) ?? []), ...(data.agentEvents ?? [])];
+  for (const e of agentSources) {
+    agentEvents.set(e.id ?? `${e.kind}-${e.txHash}-${e.timestamp}`, e);
   }
-  for (const s of id.snapshots ?? []) {
-    push(
-      s.timestamp,
-      `GATE policy #${s.policy.id}: ${s.eligible ? 'ELIGIBLE' : `REFUSED (${s.reason})`} — after ${s.trigger}`,
-      s.txHash,
-    );
+  for (const e of agentEvents.values()) {
+    const who = e.agentWallet ? ` ${short(e.agentWallet)}` : '';
+    push(e.timestamp, `AGENT ${e.kind}${who}${e.score != null ? ` score=${e.score}` : ''}`, e.txHash);
   }
-  for (const e of data.agentEvents ?? []) {
-    push(e.timestamp, `AGENT ${e.kind}${e.score != null ? ` score=${e.score}` : ''}`, e.txHash);
-  }
+
+  // Transfers are keyed by wallet, not identity — an unlinked agent (or any
+  // identity-less wallet) still has its indexed transfer history.
   for (const t of data.transfersOut ?? []) {
     push(t.timestamp, `TOKEN ${t.isBurn ? 'burn (free exit)' : `transfer ${formatEther(BigInt(t.value))} → ${short(t.to)}`}`, t.txHash);
   }
@@ -236,21 +242,28 @@ export function assembleAuditTrail(data, { wallet }) {
   events.sort((a, b) => a.timestamp - b.timestamp);
 
   const lines = events.map((e) => `${iso(e.timestamp)} · ${e.line}${e.txHash ? ` (tx ${short(e.txHash)})` : ''}`);
-  const claimsNow = (id.claims ?? []).map((c) => `${c.topicName}=${c.status}`).join(', ') || 'none';
+  const claimsNow = id
+    ? (id.claims ?? []).map((c) => `${c.topicName}=${c.status}`).join(', ') || 'none'
+    : 'none (no identity linked)';
   const facts = {
     wallet,
-    isAgent: w.isAgent,
-    identity: id.id,
+    isAgent: w ? w.isAgent : false,
+    identity: id ? id.id : null,
     events: events.length,
-    claimEvents: (id.claimEvents ?? []).length,
-    gateChecks: (id.snapshots ?? []).length,
+    claimEvents: id ? (id.claimEvents ?? []).length : 0,
+    gateChecks: id ? (id.snapshots ?? []).length : 0,
+    agentEvents: agentEvents.size,
     transfers: (data.transfersOut ?? []).length + (data.transfersIn ?? []).length,
     currentClaims: claimsNow,
-    subnames: (id.subnames ?? []).map((s) => s.label),
+    subnames: id ? (id.subnames ?? []).map((s) => s.label) : [],
   };
-  const summary =
-    `${events.length} indexed event(s) for wallet ${short(wallet)}${w.isAgent ? " (an AGENT wallet — inherits its person's passport)" : ''}. ` +
-    `Current claims: ${claimsNow}.`;
+  const summary = id
+    ? `${events.length} indexed event(s) for wallet ${short(wallet)}${w.isAgent ? " (an AGENT wallet — inherits its person's passport)" : ''}. ` +
+      `Current claims: ${claimsNow}.`
+    : `No identity is currently linked to wallet ${short(wallet)} — ` +
+      (events.length
+        ? `${events.length} indexed event(s) on record (transfers / agent history).`
+        : 'nothing on record.');
   return {
     interpretation: `Every indexed event touching wallet ${wallet}: identity, claims, latches, gate outcomes, agent links, gated transfers`,
     summary,

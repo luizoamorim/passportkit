@@ -61,6 +61,9 @@ export function blastRadiusQuery(issuer) {
 
 // "Full audit trail for wallet 0x…" — claims, latch flips, agent links, gated
 // transfers and the indexed history of the gate's own answers, time-ordered.
+// Agent events come from BOTH directions: events where this wallet IS the agent
+// (top-level filter) and events on the identity's own agents (derived field) —
+// a person wallet would otherwise show none of its agents' lifecycle.
 export function auditTrailQuery(wallet) {
   const w = wallet.toLowerCase();
   return {
@@ -83,11 +86,14 @@ export function auditTrailQuery(wallet) {
         policy { id } eligible reason trigger txHash timestamp
       }
       agents { agentWallet active score linkedAt unlinkedAt }
+      agentEvents(orderBy: timestamp, orderDirection: asc, first: 200) {
+        id kind agentWallet score txHash timestamp
+      }
       subnames { label parentNode }
     }
   }
   agentEvents(where: { agentWallet: $wallet }, orderBy: timestamp, orderDirection: asc, first: 200) {
-    kind personIdentity { id } score txHash timestamp
+    id kind agentWallet personIdentity { id } score txHash timestamp
   }
   transfersOut: tokenTransfers(where: { from: $wallet }, orderBy: timestamp, orderDirection: asc, first: 200) {
     to value isBurn txHash timestamp

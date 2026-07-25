@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeFixtureClient } from '../lib/graph.js';
-import { askOfficer, makeNarrator, parseQuestion } from '../lib/officer.js';
+import { askOfficer, assembleAuditTrail, makeNarrator, parseQuestion } from '../lib/officer.js';
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), '../lib/fixtures');
 const client = makeFixtureClient(FIXTURES);
@@ -107,6 +107,66 @@ test('audit_trail_shows_the_latch_flip_and_gate_refusal', async () => {
   assert.match(joined, /REVOKED by issuer \(latch ON\)/);
   assert.match(joined, /REFUSED \(MISSING_KYC\)/);
   assert.match(joined, /latch OFF/);
+});
+
+test('audit_trail_includes_agent_events_for_the_person_wallet', async () => {
+  const r = await askOfficer(`Full audit trail for wallet ${ALICE}`, { client, nowSec: NOW });
+  const joined = r.answer.join('\n');
+  assert.match(joined, /AGENT LINKED 0xa9e7…0001/);
+  assert.match(joined, /AGENT SCORE_SET 0xa9e7…0001 score=87/);
+  assert.equal(r.facts.agentEvents, 2);
+});
+
+test('audit_trail_keeps_transfers_for_identityless_wallets', () => {
+  const bot = '0xa9e7000000000000000000000000000000000001';
+  const r = assembleAuditTrail(
+    {
+      wallet: { id: bot, isAgent: false, identity: null },
+      agentEvents: [
+        { id: 'ae-9', kind: 'UNLINKED', agentWallet: bot, score: null, txHash: '0xaa', timestamp: '1784900000' },
+      ],
+      transfersOut: [{ to: '0xbb', value: '1000000000000000000', isBurn: false, txHash: '0xcc', timestamp: '1784800000' }],
+      transfersIn: [],
+    },
+    { wallet: bot },
+  );
+  assert.equal(r.facts.events, 2);
+  assert.match(r.lines[0], /TOKEN transfer/);
+  assert.match(r.lines[1], /AGENT UNLINKED/);
+  assert.match(r.summary, /No identity is currently linked/);
+});
+
+test('audit_trail_does_not_duplicate_agent_events_for_agent_wallets', () => {
+  const bot = '0xa9e7000000000000000000000000000000000001';
+  const ev = { id: 'ae-1', kind: 'LINKED', agentWallet: bot, score: null, txHash: '0xaa', timestamp: '1784900000' };
+  const r = assembleAuditTrail(
+    {
+      // an agent wallet resolves to the person's identity, whose agentEvents
+      // include this same event — it must appear once, not twice
+      wallet: {
+        id: bot,
+        isAgent: true,
+        identity: {
+          id: '0x1d0a11ce000000000000000000000000000a0001',
+          wallet: '0xa11ce00000000000000000000000000000000001',
+          createdAt: '1784700000',
+          createdTx: '0x01',
+          claims: [],
+          claimEvents: [],
+          snapshots: [],
+          agents: [],
+          agentEvents: [ev],
+          subnames: [],
+        },
+      },
+      agentEvents: [ev],
+      transfersOut: [],
+      transfersIn: [],
+    },
+    { wallet: bot },
+  );
+  assert.equal(r.facts.agentEvents, 1);
+  assert.equal(r.lines.filter((l) => l.includes('AGENT LINKED')).length, 1);
 });
 
 test('audit_trail_reports_current_claims_in_summary', async () => {
