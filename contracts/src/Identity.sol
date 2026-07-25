@@ -50,10 +50,12 @@ contract Identity {
     error BadSignature();
     error TopicCap();
     error NotAuthorized();
+    error NoClaimToRevoke();
 
     /// @param ownerWallet the user — seeded as MANAGEMENT (and thus effectively CLAIM, see keyHasPurpose)
     constructor(address ownerWallet, address issuerRegistry_) {
         require(ownerWallet != address(0), "zero owner");
+        require(issuerRegistry_ != address(0), "zero issuerRegistry");
         issuerRegistry = issuerRegistry_;
         _keyPurposes[keyForAddress(ownerWallet)].push(KeyPurpose.MANAGEMENT);
         emit KeyAdded(keyForAddress(ownerWallet), KeyPurpose.MANAGEMENT);
@@ -102,12 +104,13 @@ contract Identity {
 
     /// @notice Holder-side voluntary removal. NOT the compliance lever — platform revocation
     ///         is the issuer's (ClaimIssuer.setRevoked), re-checked at read by the gate.
+    /// @dev Model B: ONLY the holder (a CLAIM/MANAGEMENT key on their own identity) may remove.
+    ///      The issuer is NOT a privileged writer here — it cannot hide a holder's claim.
     function revokeClaim(uint256 topic, address issuer) external {
-        // owner or the issuer itself may remove locally
-        if (!keyHasPurpose(keyForAddress(msg.sender), KeyPurpose.MANAGEMENT) && msg.sender != issuer) {
-            revert NotAuthorized();
-        }
-        _claim[topic][issuer].revoked = true;
+        if (!keyHasPurpose(keyForAddress(msg.sender), KeyPurpose.CLAIM)) revert NotAuthorized();
+        Claim storage c = _claim[topic][issuer];
+        if (!c.exists) revert NoClaimToRevoke(); // don't emit ClaimRevoked for a non-existent claim
+        c.revoked = true;
         emit ClaimRevoked(topic, issuer);
     }
 
@@ -119,8 +122,8 @@ contract Identity {
         external view returns (bool exists, bytes memory sig, bytes memory data)
     {
         Claim storage c = _claim[topic][issuer];
-        exists = c.exists && !c.revoked;
-        return (exists, c.signature, c.data);
+        if (!(c.exists && !c.revoked)) return (false, bytes(""), bytes(""));
+        return (true, c.signature, c.data);
     }
 }
 

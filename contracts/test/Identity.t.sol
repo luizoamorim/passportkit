@@ -28,9 +28,8 @@ contract IdentityTest is Test {
 
     address owner = address(0xBEEF);
     address stranger = address(0xCAFE);
-    uint256 constant KYC = 0; // set in setUp from ClaimTopics
 
-    uint256 kyc;
+    uint256 kyc; // claim topic, set in setUp from ClaimTopics
     bytes sig = hex"01";
     bytes data = hex"02";
     uint64 exp = 0;
@@ -98,5 +97,28 @@ contract IdentityTest is Test {
         vm.prank(stranger);
         vm.expectRevert(Identity.NotAuthorized.selector);
         id.revokeClaim(kyc, address(issuer));
+    }
+
+    function test_revokeClaim_nonexistent_reverts() public {
+        vm.prank(owner);
+        vm.expectRevert(Identity.NoClaimToRevoke.selector);
+        id.revokeClaim(kyc, address(issuer)); // never submitted
+    }
+
+    /// MAX_CLAIMS_PER_TOPIC griefing cap: the (cap+1)-th trusted issuer's claim reverts.
+    function test_maxClaimsPerTopic_cap() public {
+        uint256 cap = id.MAX_CLAIMS_PER_TOPIC();
+        for (uint256 i; i < cap; ++i) {
+            MockClaimIssuer mi = new MockClaimIssuer();
+            reg.setTrusted(address(mi), kyc, true);
+            vm.prank(owner);
+            id.submitClaim(kyc, address(mi), sig, data, exp);
+        }
+        // one more trusted issuer over the cap → TopicCap
+        MockClaimIssuer extra = new MockClaimIssuer();
+        reg.setTrusted(address(extra), kyc, true);
+        vm.prank(owner);
+        vm.expectRevert(Identity.TopicCap.selector);
+        id.submitClaim(kyc, address(extra), sig, data, exp);
     }
 }
