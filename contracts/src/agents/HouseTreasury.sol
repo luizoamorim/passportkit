@@ -21,6 +21,8 @@ contract HouseTreasury {
 
     error NotOwner();
     error NotAgent();
+    /// @notice An owner whose passport no longer passes AccessGate tried to act.
+    error NotCompliantOwner();
     error NoMandate();
     error ZeroAddress();
     error BadThreshold();
@@ -173,7 +175,10 @@ contract HouseTreasury {
         emit PaymentProposed(id, vendor, amount, evidenceHash);
     }
 
+    /// @notice Approvals re-read the approver's live AccessGate status, so a revoked
+    ///         owner cannot push a queued payment over the threshold.
     function approvePayment(uint256 id) external onlyOwner {
+        if (!isCompliantOwner(msg.sender)) revert NotCompliantOwner();
         PendingPayment storage p = payments[id];
         if (p.vendor == address(0)) revert UnknownPayment();
         if (p.executed) revert AlreadyExecuted();

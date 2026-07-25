@@ -229,6 +229,27 @@ contract HouseTreasuryTest is Test {
         treasury.executePayment(id);
     }
 
+    function test_non_compliant_owner_cannot_approve() public {
+        _grant();
+        _fundTreasury(1_000 ether);
+        vm.prank(concierge);
+        uint256 id = treasury.proposePayment(stranger, 100 ether, keccak256("e"));
+        vm.prank(admin);
+        passport.revokePassport(ownerB); // queued payment, owner loses compliance after
+        vm.prank(ownerB);
+        vm.expectRevert(HouseTreasury.NotCompliantOwner.selector);
+        treasury.approvePayment(id);
+    }
+
+    function test_non_owner_cannot_approve() public {
+        _grant();
+        vm.prank(concierge);
+        uint256 id = treasury.proposePayment(stranger, 100 ether, keccak256("e"));
+        vm.prank(stranger);
+        vm.expectRevert(HouseTreasury.NotOwner.selector);
+        treasury.approvePayment(id);
+    }
+
     function test_kill_switch_blocks_new_proposals() public {
         _grant();
         vm.prank(admin);
