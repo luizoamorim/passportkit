@@ -21,6 +21,8 @@ import { foundry, sepolia } from 'viem/chains';
 
 import { decodeRefusal } from './lib/decode.js';
 import { makeDecider } from './lib/deciders.js';
+import { makeFixtureClient, makeGraphClient } from './lib/graph.js';
+import { askOfficer, makeNarrator, SUPPORTED_QUESTIONS } from './lib/officer.js';
 import { parseEnvFile } from './lib/env.js';
 import { evidenceHash } from './lib/evidence.js';
 import { settleInvoice } from './lib/x402.js';
@@ -87,6 +89,18 @@ const KEY_PURPOSES = { 1n: 'MANAGEMENT', 2n: 'ACTION', 3n: 'CLAIM' };
 // decision engine: mock rules by default, OpenAI-compatible or 0G when configured
 const DECIDER_KIND = ENV.DECIDER ?? 'mock';
 const decide = makeDecider(DECIDER_KIND, {
+  baseUrl: (ENV.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, ''),
+  model: ENV.OPENAI_MODEL ?? 'gpt-4o-mini',
+  apiKey: ENV.OPENAI_API_KEY,
+});
+
+// Compliance officer (The Graph): the live gateway client answers the judged
+// flow; the fixture client serves ONLY the labeled Simulate fallback + tests.
+const SUBGRAPH_URL = ENV.SUBGRAPH_URL || null;
+const officerLive = SUBGRAPH_URL ? makeGraphClient({ url: SUBGRAPH_URL, apiKey: ENV.GRAPH_API_KEY }) : null;
+const officerFixtures = makeFixtureClient(path.join(__dirname, 'lib', 'fixtures'));
+const OFFICER_NARRATOR = ENV.OFFICER_NARRATOR ?? 'mock';
+const narrate = makeNarrator(OFFICER_NARRATOR, {
   baseUrl: (ENV.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, ''),
   model: ENV.OPENAI_MODEL ?? 'gpt-4o-mini',
   apiKey: ENV.OPENAI_API_KEY,
@@ -1016,6 +1030,32 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(readFileSync(path.join(__dirname, 'index.html')));
+    } else if (req.method === 'GET' && url.pathname === '/officer') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(readFileSync(path.join(__dirname, 'officer.html')));
+    } else if (req.method === 'GET' && url.pathname === '/api/officer/config') {
+      json(res, 200, {
+        live: Boolean(officerLive),
+        url: SUBGRAPH_URL,
+        narrator: OFFICER_NARRATOR,
+        supported: SUPPORTED_QUESTIONS,
+      });
+    } else if (req.method === 'POST' && url.pathname === '/api/officer/ask') {
+      const { question = '', simulate = false } = await readBody(req);
+      if (typeof question !== 'string' || !question.trim()) {
+        return json(res, 400, { ok: false, message: 'question required' });
+      }
+      if (!simulate && !officerLive) {
+        return json(res, 200, {
+          ok: false,
+          reason: 'NO_SUBGRAPH_URL',
+          message:
+            'SUBGRAPH_URL is not set — configure the live subgraph endpoint in .env ' +
+            '(Subgraph Studio dev URL, or gateway URL + GRAPH_API_KEY). The Simulate ' +
+            'button replays a recorded fixture and is presentation insurance only.',
+        });
+      }
+      json(res, 200, await askOfficer(question, { client: simulate ? officerFixtures : officerLive, narrator: narrate }));
     } else if (req.method === 'GET' && url.pathname === '/api/state') {
       const now = await chainNow();
       const [house, agent, owners, payments] = await Promise.all([
