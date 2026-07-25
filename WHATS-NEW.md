@@ -12,8 +12,8 @@
   lifecycle (`ClaimAdded`/`ClaimRevoked` with the expiry decoded out of the signed
   payload via `getClaim`), the issuer revocation latch (`RevocationSet`), issuer
   trust, policies, agent links (`AgentLinked`/`AgentUnlinked` + scores), gated
-  transfers and ENS subnames/tenants. On every claim/latch event the mapping
-  **re-runs `EligibilityGate.isEligible` at index time** and stores the snapshot —
+  transfers and ENS subnames/tenants. On every claim/latch/issuer-trust event the
+  mapping **re-runs `EligibilityGate.isEligible` at index time** and stores the snapshot —
   the subgraph holds the *history of the gate's answers*, which no contract stores.
   Manifest is generated from `contracts/deployments/<chainid>.json` (no hand-edited
   addresses); `npm run prepare:sepolia && npm run codegen && npm run build` is green.

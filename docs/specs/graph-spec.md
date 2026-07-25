@@ -15,9 +15,11 @@
   agent layer), answers a closed set of question types with **deterministic query builders**, and
   every answer **cites the GraphQL query + the rows it used**. An LLM never invents data; it only
   gets involved (optional, `DECIDER`-style) to phrase the assembled answer.
-- **Eligibility is re-computed at index time**: on every claim/revocation event the mapping calls
-  `EligibilityGate.isEligible(identity, policyId)` for each known policy and stores a snapshot.
-  The subgraph therefore has the *history* of gate outcomes — something no surface stores on-chain.
+- **Eligibility is re-computed at index time**: on every claim, revocation-latch AND issuer-trust
+  event the mapping calls `EligibilityGate.isEligible(identity, policyId)` for each known policy
+  and stores a snapshot. The subgraph therefore has the *history* of gate outcomes — something no
+  surface stores on-chain. Trust flips fan out via `IssuerTrust.claimIds` (mappings cannot scan
+  the store, so claims are indexed under their issuer+topic as they land).
 - **Addresses come from `contracts/deployments/11155111.json`** (written by `DeployPassportKit.s.sol`).
   `subgraph.yaml` + `src/config.ts` are **generated** by `npm run prepare:sepolia` — no hand-edited
   addresses, consistent with "no hard-coded demo values".
@@ -68,7 +70,9 @@ Current-state entities (mutable):
   timestamps. `REVOKED` mirrors the issuer latch for that identity+topic.
 - **`RevocationLatch`** — id = `identity-topic` on the ClaimIssuer; `revoked`, `updatedAt`.
 - **`AgentLink`** — id = agent wallet; `personIdentity`, `active`, `score`, `linkedAt`, `unlinkedAt`.
-- **`Issuer`** — id = issuer address; `topics` via **`IssuerTrust`** (id = `issuer-topic`, `trusted`).
+- **`Issuer`** — id = issuer address; `topics` via **`IssuerTrust`** (id = `issuer-topic`,
+  `trusted`, plus `claimIds` — the enumerable index that lets a TrustedSet flip re-snapshot
+  every identity holding that issuer's claims).
 - **`Policy`** — id = policyId; `topics`, `topicNames`.
 - **`Subname`** — id = `parentNode-label`; `label`, `wallet`, `identity`.
 - **`PassportPolicyStatus`** — id = `identity-policyId`; latest `eligible` + `reason` from the
