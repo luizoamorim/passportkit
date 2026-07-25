@@ -1,24 +1,84 @@
-# World ID personhood MVP
+# World ID checks — personhood, Selfie Check (beta), Identity Check (preview)
 
-The `/passport` page uses the new `apps/api` endpoints only:
+The `/passport` page carries a **World ID** row with three cards, each backed by the
+same request/verify pipeline in `apps/api/src/world-id/`:
 
-1. Connect a wallet and read `GET /eligibility/:wallet`.
-2. When necessary, call `POST /identity/create`.
-3. `POST /world-id/request` signs a short-lived RP context on the server.
-4. IDKit opens in `staging`; the Simulator returns a proof.
-5. `POST /world-id/verify` forwards the untouched result to World, then signs `PROOF_OF_PERSONHOOD` when issuer contracts are configured.
-6. With a real claim, the holder's MetaMask wallet calls `Identity.submitClaim`. In `DEMO_MODE`, the response is explicitly local/mock and no transaction is claimed.
+| Check | IDKit preset | Claim topic | Portal action (default) |
+| --- | --- | --- | --- |
+| Proof of Human | `proofOfHuman` | `PROOF_OF_PERSONHOOD` | `passportkit-verify` (`WORLD_ACTION`) |
+| Selfie Check (beta, credential 11) | `selfieCheckLegacy` | `SELFIE_VERIFIED` (90-day claim) | `passportkit-selfie` (`WORLD_ACTION_SELFIE`) |
+| Identity Check (preview) | `identityCheck` (passport, 18+) | `IDENTITY_ATTESTED` | `passportkit-identity` (`WORLD_ACTION_IDENTITY`) |
+
+Flow per card:
+
+1. `POST /world-id/request { check }` — the api signs a short-lived RP context
+   (`@worldcoin/idkit-server`) and returns `app_id`, the check's `action`, the
+   **environment**, and (for the identity check) the attribute policy.
+2. `IDKitRequestWidget` opens with exactly that payload. Identity Check runs with
+   `allow_legacy_proofs={false}` (it is 4.0-only); the other two accept 3.0 fallback.
+3. `POST /world-id/verify { check, idkitResponse }` — the api forwards the IDKit
+   result **byte-for-byte** to `https://developer.world.org/api/v4/verify/{rp_id}`,
+   checks `identity_attested` for the identity check, guards nullifier replay, then
+   signs the check's claim. The holder's wallet submits it (`Identity.submitClaim`);
+   in `DEMO_MODE` without issuer keys the result is explicitly MOCK.
+
+## Environments — read this before testing (it is what sank PRs #11/#12)
+
+The IDKit `environment`, the Developer Portal **action's environment**, and the
+device completing the flow must all match. A mismatch still *looks* fine on the
+phone — the World App completes its local flow — but the proof can never pass the
+cloud verifier, so the site reports failure. That exact symptom (QR ok, phone says
+verified, website says failed) was PRs #11/#12: the widget was pinned to
+`environment="staging"` while testers scanned with the production World App.
+
+| `WORLD_ENV` | Scan with | Portal action environment |
+| --- | --- | --- |
+| `production` (default) | Real World App on a phone | production |
+| `staging` | [World ID Simulator](https://simulator.worldcoin.org) only | staging |
+| `sandbox` | Sandbox World ID app ([how to get access](https://docs.world.org/world-id/sandbox/sandbox-access)) | — |
+
+Selfie Check end-to-end testing is a **sandbox** flow: install the sandbox World ID
+build (TestFlight / Firebase link from the World booth) and set `WORLD_ENV=sandbox`.
+See [Testing Selfie Check in Sandbox](https://docs.world.org/world-id/sandbox/testing-selfie-check).
+
+Verifier rejections now surface the Developer Portal's `code`/`detail` (e.g.
+`all_verifications_failed — face: verification_error`) in the api log and the card,
+instead of a bare "failed".
+
+## Configuration (`apps/api/.env`)
+
+```
+WORLD_APP_ID=app_...            # Developer Portal app
+WORLD_RP_ID=rp_...              # RP minted when enabling World ID 4.0
+WORLD_RP_SIGNING_KEY=0x...      # server-only; never NEXT_PUBLIC_*, never logged
+WORLD_ENV=production            # production | staging | sandbox (see table above)
+WORLD_ACTION=passportkit-verify
+WORLD_ACTION_SELFIE=passportkit-selfie
+WORLD_ACTION_IDENTITY=passportkit-identity
+WORLD_IDENTITY_MINIMUM_AGE=18
+```
+
+Each action must exist in the Developer Portal **in the environment you test in**.
+Selfie Check and Identity Check are gated betas — have the World booth enable them
+for the app (`developers@toolsforhumanity.com` outside a hackathon). The precheck
+endpoint (`POST https://developer.world.org/api/v1/precheck/{app_id}` with
+`{"action": "..."}`) tells you whether a capability is enabled before you burn
+demo time on an unexplained spinner.
 
 ## Run
 
-```powershell
-cd C:\Users\Domingos\Documents\Hackathon\passportkit
-npm run start --workspace=apps/api
-NEXT_IGNORE_INCORRECT_LOCKFILE=1 npm run dev --workspace=apps/web -- --port 3003
+```bash
+npm run start --workspace=apps/api          # api on :3005 (see .env PORT)
+npm run dev --workspace=apps/web -- --port 3003
 ```
 
-The supplied local files use API port 3005 to avoid the existing process on 3001. Set `WORLD_APP_ID`, `WORLD_RP_ID`, and `WORLD_RP_SIGNING_KEY` in `apps/api/.env` with staging values from the World Developer Portal; do not put the signing key in the web environment.
+Connect a wallet on `/passport`; the World ID row creates the identity when needed.
+With deployed issuer/factory/gate and keys, each verified check ends in a wallet
+`submitClaim` transaction; otherwise the card visibly says MOCK.
 
-## Simulator
+## Replay protection
 
-Create a staging World app/action matching `WORLD_ACTION`, start both apps, connect MetaMask, open `/passport`, and select **Verify with World ID**. Scan/open the staging request in the World ID Simulator, complete the Proof of Human flow, and return to the page. With deployed issuer/factory/gate and keys, approve the MetaMask `submitClaim` transaction; otherwise the result is visibly labelled MOCK.
+Every verified proof's `(action, nullifier)` pair is recorded; the same World ID
+re-verifying the same check on a **different wallet** is refused. The store is
+in-memory (demo-grade) — production needs the documented `NUMERIC(78,0)` +
+`UNIQUE (action, nullifier)` column instead.
