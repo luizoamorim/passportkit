@@ -3,9 +3,12 @@
 > Surface #4 of PassportKit. A v4 hook that **gates swap + add-liquidity** by compliance, reusing `EligibilityGate.isEligible(identity, policyId)` — the same interface as the Deal Room. Track: **Best Uniswap Stack Contribution** ($3k, continuity-only).
 
 > **Status: implemented, as specified** — `contracts/src/hooks/ComplianceHook.sol`, tests in
-> `contracts/test/ComplianceHook.t.sol`, demo at **`/markets` in `apps/web`** (both pools, the
+> `contracts/test/ComplianceHook.t.sol` (15), demo at **`/markets` in `apps/web`** (both pools, the
 > issuer controls and the tx inspector; driven by `/api/demo/world` + `/api/demo/markets`, which
-> need `DEMO_MODE=true` and a world deployed by `contracts/script/DeployAll.s.sol`). The hook resolves
+> need `DEMO_MODE=true` and a world deployed by `contracts/script/DeployAll.s.sol`).
+> **Run it: `make demo` → http://localhost:3003/markets.** There is no separate demo app or port
+> any more — `/markets` is a route on the one site, sharing its wallet, chain and design with
+> `/passport`, `/deal-room` and `/concierge`. The hook resolves
 > `IdentityFactory.identityOfWallet(wallet)` and calls `EligibilityGate.isEligible(identity,
 > policyId)`; a pool's policy is the immutable `policyId` (repo-wide: `1` = Deal Room / KYC,
 > `2` = Investor / KYC + accredited). The revert carries the **gate's own** reason code
@@ -125,6 +128,11 @@ contract ComplianceHook is BaseHook {
 **Avoid (rabbit hole):** a web swap UI (UniversalRouter + Permit2 + approvals). The revert is shown in the test/script.
 
 ## 5. Demo (WOW)
+
+Live at `/markets` (`make demo`). The beats below are the buttons on that page — and
+because it is one site, beat 4 is visible on `/deal-room` and `/concierge` in the same
+breath, without changing tabs on a different port.
+
 ```
 v4 pool with ComplianceHook, policyId = 1 (KYC_VERIFIED)
 1) Wallet with no valid claim tries to swap  → revert NotCompliant(MISSING_KYC)

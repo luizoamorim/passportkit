@@ -276,22 +276,33 @@ anything above the per-tx cap is queued for m-of-n owner approval with the agent
 decision hash anchored on-chain.
 
 - Local demo: `make demo` → http://localhost:3003/concierge
-- Tests: `cd contracts && forge test --match-path 'test/agents/*'` (29) and `npm test --workspace=apps/web` (35)
+- Tests: `cd contracts && forge test --match-path 'test/agents/*'` (29) and `npm test --workspace=apps/web` (39)
 - Spec & design notes: [`docs/specs/agent-concierge-spec.md`](docs/specs/agent-concierge-spec.md)
 
 ---
 
 ## Repo Structure
 
+One site, one command. Everything a visitor touches is `apps/web`:
+
 ```
 apps/
+  web/       — Next.js 14 App Router — THE demo site (TailwindCSS + Privy)
+      src/app/{passport,deal-room,markets,concierge}/   the four routes
+      src/app/api/demo/**                              the demo runtime (local anvil only)
+      src/lib/demo/                                    deciders · evidence · x402 · decode · positions
+      test/demo/                                       node:test for those libs
   api/       — NestJS backend (Prisma + PostgreSQL)
-  web/       — Next.js 14 frontend (TailwindCSS + Privy)
 contracts/   — Foundry smart contracts (Solidity)
+      script/DeployAll.s.sol                           the one demo world
 cre/         — Chainlink CRE workflow (TypeScript + viem)
 demo/        — Synthetic compliance documents + AI prompts
-docs/        — Architecture, AI usage, judges notes
+docs/        — Architecture, specs, AI usage, judges notes
 ```
+
+The Uniswap hook demo and the concierge demo used to be two extra node servers on two
+extra ports. They are now the `/markets` and `/concierge` routes on the site above —
+same wallet, same chain, same design.
 
 ---
 
@@ -341,8 +352,9 @@ make demo
 ```
 
 `make demo` starts anvil (or reuses one already listening), deploys the one demo world,
-and serves the site on **http://localhost:3003** with `DEMO_MODE=true`. Walk the four
-routes in order — it is one wallet and one chain all the way through:
+and serves the site on **http://localhost:3003** with `DEMO_MODE=true`. Start at
+[`/`](http://localhost:3003/) — it is one story in four steps, and one wallet and one
+chain all the way through:
 
 | Route | What it shows |
 |---|---|
@@ -364,8 +376,9 @@ make up                                 # the full product stack: db + api + cre
 `make up` is the exception: it *replaces* the chain on :8545, which is `make demo`'s default
 port too, so give the demo its own `RPC_PORT` if you want both at once.
 
-`make hook-demo` and `make concierge-demo` still work — they print a deprecation notice
-and run `make demo`, since both standalone demos are now routes on this site.
+`make demo` is now the only demo command — the two standalone demo servers, and the
+targets that started them, are gone. Want a block explorer over the demo chain?
+`make demo-explorer` runs Otterscan on http://localhost:5100.
 
 ### One demo world
 
@@ -394,6 +407,11 @@ accounts. `apps/web/env.example` documents every variable the site reads (`DEMO_
 the server sign with those keys — it belongs on a laptop, never on a deployment.** With
 it unset, `/passport` and `/deal-room` work as normal and `/markets` and `/concierge`
 say the runtime is off.
+
+There are two templates in `apps/web` and they are not interchangeable: **`env.example`
+is the local demo one** (`DEMO_MODE`, `RPC_URL`, the actor keys — the file you want for
+`make demo`), while **`.env.example` is the hosted Sepolia one** for a deployment of the
+product pages, and it does not turn the demo runtime on.
 
 ---
 

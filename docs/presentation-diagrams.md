@@ -28,14 +28,14 @@ flowchart TD
     subgraph S4["Surface 4 · compliant markets · NEW"]
         HOOK["ComplianceHook<br/>gates swap + add liquidity"]
         ROUTER["DemoPositionRouter<br/>caller-bound positions"]
-        HDEMO["apps/hook-demo<br/>runnable demo"]
+        HDEMO["apps/web · /markets<br/>runnable demo"]
     end
 
     subgraph S5["Surface 5 · house concierge · NEW"]
         TREAS["HouseTreasury<br/>mandate + m-of-n queue"]
         CASA["HouseToken · CASA<br/>agent budget"]
         MHOOK["MandateHook<br/>gates the budget pool"]
-        AGENT["apps/concierge<br/>agent runtime + x402"]
+        AGENT["apps/web · /concierge<br/>agent runtime + x402"]
     end
 
     WEB --> ATT --> API --> CRE
@@ -229,22 +229,34 @@ stateDiagram-v2
 
 ---
 
-## 7. Demo run sheet — two minutes
+## 7. Demo run sheet — one site, four routes, two minutes
+
+> `npm install && make demo` → http://localhost:3003. One wallet, one chain, four
+> routes walked in story order. Nothing is restarted between beats.
 
 ```mermaid
 flowchart LR
-    A["1 · Leaky faucet<br/>120 mUSD"] --> B["agent pays alone<br/>swap + x402"]
-    B --> C["2 · Roof repair<br/>4500 mUSD"]
-    C --> D["queued · 2 owners approve<br/>treasury pays"]
-    D --> E["3 · Revoke Ana's KYC"]
-    E --> F["both rails refuse<br/>OWNER_NOT_COMPLIANT"]
-    F --> G["4 · Restore<br/>everything works again"]
+    R0["/<br/>the thesis"] --> R1["/passport<br/>1 · Rui gets verified"]
+    R1 --> O1["AI attester → CRE →<br/>claim on his Identity"]
+    O1 --> R2["/deal-room<br/>2 · the gate answers"]
+    R2 --> O2["LIMITED unlocks<br/>no document asked for"]
+    O2 --> R3["/markets<br/>3 · same gate, a v4 pool"]
+    R3 --> O3["swap passes · investor pool<br/>still refuses MISSING_ACCREDITED"]
+    O3 --> R4["/concierge<br/>4 · hand an agent a mandate"]
+    R4 --> O4["120 auto-paid (swap + x402)<br/>4500 queued → 2 owners approve"]
+    O4 --> K["5 · Revoke Ana's KYC<br/>one claim, one issuer"]
+    K --> BAD["every surface refuses at once<br/>OWNER_NOT_COMPLIANT"]
+    BAD --> FIN["6 · Restore<br/>all four work again"]
 
-    classDef step fill:#E3F0FE,stroke:#2C7FE8,color:#0D1428
+    classDef route fill:#E3F0FE,stroke:#2C7FE8,color:#0D1428
     classDef out fill:#DEF7F6,stroke:#17A8A6,color:#0D1428
     classDef bad fill:#FEE2E2,stroke:#DC2626,color:#0D1428
 
-    class A,C,E,G step
-    class B,D out
-    class F bad
+    class R0,R1,R2,R3,R4,K,FIN route
+    class O1,O2,O3,O4 out
+    class BAD bad
 ```
+
+The hero is beat 5: one `setRevoked` on the ClaimIssuer, and the Deal Room, both
+Uniswap v4 pools and both of the agent's spending rails change their answer in the
+same block — without a single one of them being redeployed or reconfigured.
