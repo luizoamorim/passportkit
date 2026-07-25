@@ -21,10 +21,10 @@
 
 ### Gaps to build
 - **Backend (1 new endpoint):** `POST /identity/create` — agent (AGENT_ROLE) calls `IdentityFactory.createIdentity(wallet)`. Mirrors `revocation.service.ts`.
-- **Frontend screens:** admin tenant console, identity + World + passport, deal-room gate, agent-link.
+- **Frontend screens:** identity + World + passport, deal-room gate, agent-link. _(No `/admin` screen for the demo — tenant setup is a one-time ops step; in-app admin console is roadmap, see §3a.)_
 - **World ID:** real IDKit integration (Rafael) — **mock for now**.
 - **Agent linking:** on-chain wiring + endpoint (Noé).
-- **Ops:** register `passportkit.eth` on Sepolia (wrap + set resolver), run deploy, fill `.env` from `deployments/<chainid>.json`.
+- **Ops:** register + wrap `passportkit.eth` on Sepolia, point its resolver to `PassportResolver`, set `ENS_PARENT_NODE` so the deploy wires the tenant, run deploy, post-deploy `setApprovalForAll(registrar)`, fill `.env` from `deployments/<chainid>.json`.
 
 ---
 
@@ -33,7 +33,6 @@
 ```mermaid
 graph TD
     subgraph Actors
-        ADMIN["Tenant Admin wallet"]
         USER["User wallet (MANAGEMENT key)"]
         AGENTW["x402 Agent wallet"]
     end
@@ -58,7 +57,7 @@ graph TD
         HOOK["Uniswap v4 hook"]
     end
 
-    ADMIN -->|createIdentity via backend| AGENTK
+    USER -->|requests identity via backend| AGENTK
     AGENTK --> FACT
     FACT --> ID
     SIGN -->|signature + data| USER
@@ -86,21 +85,16 @@ graph TD
 
 ## 3. The new end-to-end flow
 
-### 3a. Admin — create the tenant (all wallet txs, no backend)
+### 3a. Tenant setup — one-time OPS, not an app screen
 
-```mermaid
-sequenceDiagram
-    actor Admin
-    participant RES as PassportResolver
-    participant NW as NameWrapper
+For the demo we register **one** parent name, `passportkit.eth`, up front and wire it once. **There is no `/admin` screen** — the deploy script does the tenant wiring. All test identities hang **below** `passportkit.eth` as subnames (`alice.passportkit.eth`); agents get subnames too.
 
-    Note over Admin,RES: Prereq once on the ENS app, register and wrap passportkit.eth then point its resolver to PassportResolver
-    Admin->>RES: setTenant with parentNode, gate, policyId, controller
-    Note right of RES: TOFU, first caller wins. controller is the registrar so it can bind subnames
-    Admin->>NW: setApprovalForAll registrar true
-    Note right of NW: lets the registrar mint subnames under the name
-    Note over Admin,NW: Tenant is live
-```
+1. Register + wrap `passportkit.eth` on the ENS app (Sepolia), owned by the ops wallet.
+2. Point its resolver to `PassportResolver` (`setResolver`).
+3. Set `ENS_PARENT_NODE` (namehash of `passportkit.eth`) in `contracts/.env` → `DeployPassportKit.s.sol` calls `resolver.setTenant(parentNode, gate, policyId, registrar)` automatically at deploy time.
+4. Post-deploy (ops wallet): `NameWrapper.setApprovalForAll(registrar, true)` so the registrar can mint subnames.
+
+> **Roadmap (not built for the demo):** an in-app **admin console** where a tenant self-serves this — register a name, pick a policy, wire the tenant from the UI. For the demo it's a scripted ops step; we present the console as the productization path.
 
 ### 3b. User — identity, personhood, access
 
@@ -173,8 +167,7 @@ sequenceDiagram
 
 | Screen | Route | Purpose | Reads / Writes |
 |---|---|---|---|
-| **Landing** | `/` | Pitch + nav (Admin / My Passport / Deal Room). | — |
-| **Tenant Console** | `/admin` | Admin wires the tenant. | **W:** `resolver.setTenant`, `NameWrapper.setApprovalForAll` · **R:** `resolver.tenantOf(node)` |
+| **Landing** | `/` | Pitch + nav (My Passport / Deal Room / My Agents). | — |
 | **My Passport** | `/passport` | Create identity, verify World (mock), submit claims, show badges + status + eligibility + tx timeline. | **W (BE):** `POST /identity/create`, `POST /issuer/mock-claim` · **W (wallet):** `Identity.submitClaim` · **R:** `GET /eligibility/:wallet`, `factory.identityOfWallet` |
 | **Deal Room** | `/deal-room` | Locked / limited / unlocked by eligibility. | **R:** `GET /eligibility/:wallet` (policy #1 & #2) |
 | **My Agents** | `/passport#agents` or `/agents` | Link an agent wallet (Model A); show it inherits eligibility; revoke-person demo. | **W (BE):** `POST /identity/link-agent` (Noé) · **R:** eligibility of agent wallet |
@@ -199,7 +192,7 @@ sequenceDiagram
 ## 6. Task breakdown
 
 ### Rafael — Frontend screens
-- **`/admin` Tenant Console:** connect admin wallet; inputs (parent ENS name → namehash, policyId, gate + registrar addresses from `.env`); buttons `setTenant` + `setApprovalForAll` (+ optional `setResolver`); show `tenantOf` + tx hashes on explorer.
+> No `/admin` screen for the demo (tenant setup is ops, §3a). Focus on the user + agent surfaces.
 - **`/passport`:** "Create my identity" (→ `POST /identity/create`); World ID card (**mock now**: `POST /issuer/mock-claim` topic `PROOF_OF_PERSONHOOD` → `Identity.submitClaim` from user wallet); same pattern for `KYC_VERIFIED` + `ACCREDITED_INVESTOR`; badges + passport status + `GET /eligibility/:wallet`; tx timeline.
 - **`/deal-room`:** lock/limited/unlock from eligibility (policy #1 = enter, #2 = invest).
 - **World ID (later):** replace the mock card with real IDKit (`NEXT_PUBLIC_WORLD_APP_ID`, `NEXT_PUBLIC_WORLD_ACTION`) → verify proof → sign personhood claim.
@@ -211,7 +204,7 @@ sequenceDiagram
 - **The show:** the live view / graph that makes the revoke-cascade visible.
 
 ### Luiz Henrique — Ops + glue (afternoon, with the team)
-- **Deploy to Sepolia:** register/wrap `passportkit.eth`, set its resolver; run `DeployPassportKit.s.sol`; copy `deployments/11155111.json` into api + web `.env` and the subgraph manifest.
+- **Tenant + deploy (Sepolia):** register + wrap `passportkit.eth`, point its resolver to `PassportResolver`; set `ENS_PARENT_NODE` in `contracts/.env` so `DeployPassportKit.s.sol` wires `setTenant` automatically; run the deploy; post-deploy `NameWrapper.setApprovalForAll(registrar, true)`; copy `deployments/11155111.json` into api + web `.env` and the subgraph manifest.
 - **Backend:** `POST /identity/create` (thin, mirrors `revocation.service`).
 - **Decide** the personhood-policy question (§5).
 - Demo script + fallbacks.
