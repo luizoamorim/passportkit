@@ -138,7 +138,7 @@ Timewarp and reset are local-only; mandate-expiry demos need real time on testne
 ## Tests
 
 ```bash
-cd contracts && forge test --match-path 'test/agents/*'   # HouseToken 4 · HouseTreasury 18 · MandateHook 7
+cd contracts && forge test --match-path 'test/agents/*'   # HouseToken 4 · HouseTreasury 23 · MandateHook 9
 cd apps/concierge && npm test                             # 35: decider rules, x402 client, evidence hashing, decoders
 ```
 
