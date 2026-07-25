@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PrivyLoginButton } from '@/components/wallet/PrivyLoginButton';
-import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
+import { ConnectMenu } from '@/components/connect/ConnectMenu';
 import { ComplianceProgressStepper } from '@/components/passport/ComplianceProgressStepper';
 import { PassportCard } from '@/components/passport/PassportCard';
 import { AccessDecisionBanner } from '@/components/passport/AccessDecisionBanner';
@@ -19,7 +19,7 @@ const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 export default function PassportPage() {
   const router = useRouter();
   const [wallet, setWallet] = useState<string | null>(null);
-  const [provider, setProvider] = useState<'privy' | 'metamask'>('metamask');
+  const [provider, setProvider] = useState<'privy' | 'wallet'>('wallet');
   const [state, setState] = useState<EligibilityState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,13 +41,13 @@ export default function PassportPage() {
     }
   }, []);
 
-  const onWalletReady = useCallback(async (address: string, nextProvider: 'privy' | 'metamask') => {
+  const onWalletReady = useCallback(async (address: string, nextProvider: 'privy' | 'wallet') => {
     setWallet(address); setProvider(nextProvider); setPersonhoodVerified(false); setLoading(true);
     await refresh(address, true); setLoading(false);
   }, [refresh]);
 
-  const handleMetaMaskWalletReady = useCallback(
-    (address: string) => onWalletReady(address, 'metamask'),
+  const handleWalletReady = useCallback(
+    (address: string) => onWalletReady(address, 'wallet'),
     [onWalletReady],
   );
   const handlePrivyWalletReady = useCallback(
@@ -62,7 +62,7 @@ export default function PassportPage() {
   return <div className="min-h-screen bg-[#F0F2F6]">
     <header className="bg-white border-b border-[#DDE1EA]"><div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
       <Link href="/" className="font-bold text-[#0D1428] text-sm">{PRODUCT_NAME}</Link>
-      {HAS_PRIVY ? <PrivyLoginButton onWalletReady={handlePrivyWalletReady} onDisconnect={disconnect} address={provider === 'privy' ? wallet : null} /> : <ConnectWalletButton onConnect={handleMetaMaskWalletReady} onDisconnect={disconnect} address={wallet} />}
+      {HAS_PRIVY ? <PrivyLoginButton onWalletReady={handlePrivyWalletReady} onDisconnect={disconnect} address={provider === 'privy' ? wallet : null} /> : <ConnectMenu onConnect={handleWalletReady} onDisconnect={disconnect} address={provider === 'privy' ? null : wallet} />}
     </div></header>
     <main className="max-w-6xl mx-auto px-6 py-8">
       <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-1">Compliance Flow</p>

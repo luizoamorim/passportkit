@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
+import { ConnectMenu } from '@/components/connect/ConnectMenu';
 import { PrivyLoginButton } from '@/components/wallet/PrivyLoginButton';
 import { DealRoomLocked } from '@/components/deal-room/DealRoomLocked';
 import { DealRoomLimited } from '@/components/deal-room/DealRoomLimited';
@@ -79,7 +79,7 @@ export default function DealRoomPage() {
             {HAS_PRIVY ? (
               <PrivyLoginButton onWalletReady={handlePrivyWalletReady} address={null} />
             ) : (
-              <ConnectWalletButton onConnect={handleMetaMaskWalletReady} address={null} />
+              <ConnectMenu onConnect={handleMetaMaskWalletReady} address={null} />
             )}
           </div>
         </div>
@@ -131,7 +131,7 @@ export default function DealRoomPage() {
             {!walletAddress && (
               HAS_PRIVY
                 ? <PrivyLoginButton onWalletReady={handlePrivyWalletReady} address={null} />
-                : <ConnectWalletButton onConnect={handleMetaMaskWalletReady} address={null} />
+                : <ConnectMenu onConnect={handleMetaMaskWalletReady} address={null} />
             )}
             <Link
               href="/passport"
