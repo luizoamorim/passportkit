@@ -611,6 +611,17 @@ function refusalOf(err) {
   return { reason: 'ERROR', wallet: null, message: String(err?.shortMessage ?? err?.message ?? err).slice(0, 300) };
 }
 
+// Rail 2 reverts bare — HouseTreasury.NotAgent() carries no reason code, so
+// decodeRefusal returns null. Fall back to the treasury's own standing view so
+// the refusal still names *why* the agent lost authority.
+async function refusalWithStanding(err) {
+  const refusal = refusalOf(err);
+  if (decodeRefusal(err)) return refusal;
+  const standing = await readStanding(actorAddress.concierge).catch(() => null);
+  if (!standing || standing.ok || !standing.reason) return refusal;
+  return { ...refusal, reason: standing.reason, wallet: actorAddress.concierge, source: 'treasury' };
+}
+
 // Rail 1, step 1: liquify budget. The concierge sells CASA for exactly the
 // invoice amount of mUSD through the MandateHook-gated pool — an exact-output
 // swap, because an exact-input swap of `amount` CASA nets less than `amount`
@@ -686,7 +697,7 @@ async function doTicket({ description, amount, category }) {
       record.status = 'rejected';
     }
   } catch (err) {
-    record.refusal = refusalOf(err);
+    record.refusal = await refusalWithStanding(err);
     record.status = 'refused';
   }
 
