@@ -25,7 +25,11 @@ contract HouseTreasury {
     error NotCompliantOwner();
     error NoMandate();
     error ZeroAddress();
+    error ZeroAmount();
     error BadThreshold();
+    /// @notice The same address appeared twice in the owner set — it would count once
+    ///         toward the threshold but inflate owners_.length, locking the treasury.
+    error DuplicateOwner();
     error UnknownPayment();
     error AlreadyApproved();
     error AlreadyExecuted();
@@ -34,6 +38,7 @@ contract HouseTreasury {
     event MandateGranted(address indexed agent, uint256 perTxCap, uint64 expiresAt);
     event MandateRevoked(address indexed agent);
     event ConciergeFunded(address indexed agent, uint256 amount);
+    event BudgetReclaimed(address indexed agent, uint256 amount);
     event Deposited(address indexed from, uint256 amount);
     event PaymentProposed(uint256 indexed id, address indexed vendor, uint256 amount, bytes32 evidenceHash);
     event PaymentApproved(uint256 indexed id, address indexed owner, uint256 approvals);
@@ -84,6 +89,7 @@ contract HouseTreasury {
         if (approvalThreshold_ == 0 || approvalThreshold_ > owners_.length) revert BadThreshold();
         for (uint256 i = 0; i < owners_.length; i++) {
             if (owners_[i] == address(0)) revert ZeroAddress();
+            if (isOwner[owners_[i]]) revert DuplicateOwner();
             owners.push(owners_[i]);
             isOwner[owners_[i]] = true;
         }
@@ -148,6 +154,7 @@ contract HouseTreasury {
     function reclaimBudget(uint256 casaAmount) external onlyOwner {
         if (mandate.agent == address(0)) revert NoMandate();
         HOUSE_TOKEN.reclaim(mandate.agent, casaAmount);
+        emit BudgetReclaimed(mandate.agent, casaAmount);
     }
 
     function deposit(uint256 amount) external {
@@ -164,6 +171,7 @@ contract HouseTreasury {
         (bool ok,) = isAgentInGoodStanding(msg.sender);
         if (!ok) revert NotAgent();
         if (vendor == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
         id = nextPaymentId++;
         payments[id] = PendingPayment({
             vendor: vendor,

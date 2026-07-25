@@ -63,6 +63,16 @@ contract HouseTreasuryTest is Test {
         treasury.grantMandate(concierge, 200 ether, FUTURE);
     }
 
+    // --- construction ---
+
+    function test_constructor_rejects_duplicate_owners() public {
+        address[] memory dupes = new address[](2);
+        dupes[0] = ownerA;
+        dupes[1] = ownerA; // passes the length check, but can only ever approve once
+        vm.expectRevert(HouseTreasury.DuplicateOwner.selector);
+        new HouseTreasury(dupes, 2, IERC20(address(musd)), IAccessGate(address(gate)), "Casa Azul Scrip", "CASA");
+    }
+
     // --- mandate + standing ---
 
     function test_standing_no_mandate() public view {
@@ -139,6 +149,16 @@ contract HouseTreasuryTest is Test {
         assertEq(treasury.HOUSE_TOKEN().balanceOf(concierge), 30 ether);
     }
 
+    function test_reclaim_budget_emits_event() public {
+        _grant();
+        vm.startPrank(ownerA);
+        treasury.fundConcierge(50 ether);
+        vm.expectEmit(true, false, false, true);
+        emit HouseTreasury.BudgetReclaimed(concierge, 20 ether);
+        treasury.reclaimBudget(20 ether);
+        vm.stopPrank();
+    }
+
     function test_fund_requires_mandate() public {
         vm.prank(ownerA);
         vm.expectRevert(HouseTreasury.NoMandate.selector);
@@ -176,6 +196,13 @@ contract HouseTreasuryTest is Test {
         vm.prank(concierge);
         vm.expectRevert(HouseTreasury.NotAgent.selector);
         treasury.proposePayment(stranger, 1 ether, keccak256("evidence"));
+    }
+
+    function test_propose_rejects_zero_amount() public {
+        _grant();
+        vm.prank(concierge);
+        vm.expectRevert(HouseTreasury.ZeroAmount.selector);
+        treasury.proposePayment(stranger, 0, keccak256("e"));
     }
 
     function test_full_approval_flow_pays_vendor() public {
