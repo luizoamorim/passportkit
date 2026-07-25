@@ -51,7 +51,8 @@ contract PassportResolver {
     error ZeroFactory();
 
     constructor(address identityFactory_) {
-        if (identityFactory_ == address(0)) revert ZeroFactory();
+        // Must be a contract exposing identityOfWallet — else agent-registration text() lookups revert.
+        if (identityFactory_ == address(0) || identityFactory_.code.length == 0) revert ZeroFactory();
         identityFactory = IIdentityLookup(identityFactory_);
     }
 
@@ -183,10 +184,15 @@ contract PassportResolver {
         return out;
     }
 
+    /// @dev Prefix match, ASCII case-insensitive (ERC-7930/hex clients may emit uppercase).
     function _startsWith(bytes memory s, bytes memory p) internal pure returns (bool) {
         if (s.length < p.length) return false;
         for (uint256 i; i < p.length; ++i) {
-            if (s[i] != p[i]) return false;
+            uint8 a = uint8(s[i]);
+            uint8 b = uint8(p[i]);
+            if (a >= 65 && a <= 90) a += 32; // A-Z -> a-z
+            if (b >= 65 && b <= 90) b += 32;
+            if (a != b) return false;
         }
         return true;
     }

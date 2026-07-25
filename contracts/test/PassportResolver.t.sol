@@ -93,6 +93,22 @@ contract PassportResolverTest is Test {
         assertEq(resolver.text(node, "agent-registration[x][y]"), "");
     }
 
+    function test_agentRegistration_case_insensitive() public {
+        factory.link(agent, identity);
+        // A client that emits the whole key uppercased must still verify.
+        string memory upper = _uc(resolver.agentRegistrationKey(agent));
+        assertEq(resolver.text(node, upper), "1");
+    }
+
+    function _uc(string memory s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        for (uint256 i; i < b.length; ++i) {
+            uint8 c = uint8(b[i]);
+            if (c >= 97 && c <= 122) b[i] = bytes1(c - 32); // a-z -> A-Z
+        }
+        return string(b);
+    }
+
     function test_status_green_when_eligible() public view {
         assertEq(resolver.text(node, "compliance.status"), "GREEN");
     }
