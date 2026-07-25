@@ -227,7 +227,7 @@ export default function MarketsPage() {
             at: Date.now(),
             tone: 'good',
             message: 'world: reset',
-            outcome: 'fresh chain, fresh contracts, clock back to today',
+            outcome: 'fresh chain, fresh contracts, clock back to today — both demos',
           },
         ]);
       }),
@@ -298,8 +298,12 @@ export default function MarketsPage() {
                 >
                   ⏩ Fast-forward 1 year
                 </ActionButton>
-                <ActionButton onClick={reset} disabled={busySet.has('world')} title="fresh chain, fresh contracts">
-                  ↺ Reset world
+                <ActionButton
+                  onClick={reset}
+                  disabled={busySet.has('world')}
+                  title="fresh chain, fresh contracts — resets the whole world, Concierge included"
+                >
+                  ↺ Reset world — both demos
                 </ActionButton>
               </div>
             )}

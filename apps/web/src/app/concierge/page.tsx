@@ -490,7 +490,7 @@ export default function ConciergePage() {
                     disabled={anyBusy}
                     title="fresh chain, fresh contracts — resets the whole world, Markets included"
                   >
-                    ↺ Reset world
+                    ↺ Reset world — both demos
                   </ActionButton>
                 </>
               )}
