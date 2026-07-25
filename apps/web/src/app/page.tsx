@@ -35,28 +35,7 @@ const STEPS = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#F0F2F6]">
-      {/* Nav */}
-      <nav className="bg-white border-b border-[#DDE1EA]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4A9EFF] to-[#3DDBD9] flex items-center justify-center">
-              <span className="text-white text-xs font-bold">PC</span>
-            </div>
-            <div>
-              <span className="font-bold text-[#0D1428] text-sm">{PRODUCT_NAME}</span>
-              <span className="hidden sm:inline text-xs text-[#9CA3AF] ml-2">powered by Node · Chainlink · Privy</span>
-            </div>
-          </div>
-          <Link
-            href="/passport"
-            className="text-sm font-semibold text-[#4A9EFF] hover:text-[#2B7FE0] transition-colors"
-          >
-            Launch App →
-          </Link>
-        </div>
-      </nav>
-
+    <div className="flex-1 bg-[#F0F2F6]">
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-6 pt-20 pb-16 text-center">
         <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-4">
@@ -151,14 +130,6 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="border-t border-[#DDE1EA] bg-white py-6">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
-          <span className="text-xs text-[#9CA3AF]">{PRODUCT_NAME}</span>
-          <span className="text-xs text-[#9CA3AF]">ETHGlobal Hackathon Demo</span>
-        </div>
-      </footer>
     </div>
   );
 }

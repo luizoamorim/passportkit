@@ -1,10 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { PrivyLoginButton } from '@/components/wallet/PrivyLoginButton';
-import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
+import { useWallet, WalletConnectControl } from '@/components/shell/AppShell';
 import { ComplianceProgressStepper } from '@/components/passport/ComplianceProgressStepper';
 import { EvidenceCard } from '@/components/passport/EvidenceCard';
 import { PassportCard } from '@/components/passport/PassportCard';
@@ -24,7 +21,6 @@ import {
 import { getWalletPolicy, updateTransferLimit } from '@/modules/wallet/wallet.service';
 import type { WalletPolicy } from '@/modules/wallet/wallet.service';
 import type { PassportState, ClaimType } from '@/modules/passport/passport.types';
-import { PRODUCT_NAME } from '@/modules/passport/passport.constants';
 
 const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
@@ -47,9 +43,8 @@ function isActive(state: PassportState | null): boolean {
 }
 
 export default function PassportPage() {
-  const router = useRouter();
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [walletProvider, setWalletProvider] = useState<'privy' | 'metamask'>('privy');
+  // The wallet lives in the shell, so it survives navigation to /deal-room and back.
+  const { address: walletAddress, provider: walletProvider } = useWallet();
   const [passport, setPassport] = useState<PassportState | null>(null);
   const [walletPolicy, setWalletPolicy] = useState<WalletPolicy | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,35 +76,25 @@ export default function PassportPage() {
     }
   }, []);
 
-  const handleWalletReady = useCallback(
-    async (address: string, provider: 'privy' | 'metamask' = 'privy') => {
-      setWalletAddress(address);
-      setWalletProvider(provider);
-      setLoading(true);
-      await Promise.all([fetchPassport(address), fetchPolicy(address)]);
+  // Load on connect, clear on disconnect — the shell owns the address now.
+  useEffect(() => {
+    if (!walletAddress) {
+      setPassport(null);
+      setWalletPolicy(null);
+      setError(null);
+      setActiveVerificationIds({});
       setLoading(false);
-    },
-    [fetchPassport, fetchPolicy],
-  );
-
-  // Stable callbacks for each provider — avoids re-creating inline arrows in JSX
-  const handlePrivyWalletReady = useCallback(
-    (addr: string) => handleWalletReady(addr, 'privy'),
-    [handleWalletReady],
-  );
-  const handleMetaMaskWalletReady = useCallback(
-    (addr: string) => handleWalletReady(addr, 'metamask'),
-    [handleWalletReady],
-  );
-
-  function handleDisconnect() {
-    setWalletAddress(null);
-    setPassport(null);
-    setWalletPolicy(null);
-    setError(null);
-    setActiveVerificationIds({});
-    router.push('/');
-  }
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([fetchPassport(walletAddress), fetchPolicy(walletAddress)]).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress, fetchPassport, fetchPolicy]);
 
   useEffect(() => {
     if (!walletAddress) {
@@ -199,35 +184,8 @@ export default function PassportPage() {
   const accreditedClaim = passport?.claims.find((c) => c.claimType === 'ACCREDITED_INVESTOR');
 
   return (
-    <div className="min-h-screen bg-[#F0F2F6]">
-      {/* Header */}
-      <header className="bg-white border-b border-[#DDE1EA]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4A9EFF] to-[#3DDBD9] flex items-center justify-center">
-              <span className="text-white text-xs font-bold">PC</span>
-            </div>
-            <span className="font-bold text-[#0D1428] text-sm">{PRODUCT_NAME}</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            {HAS_PRIVY ? (
-              <PrivyLoginButton
-                onWalletReady={handlePrivyWalletReady}
-                onDisconnect={handleDisconnect}
-                address={walletProvider === 'privy' ? walletAddress : null}
-              />
-            ) : (
-              <ConnectWalletButton
-                onConnect={handleMetaMaskWalletReady}
-                onDisconnect={handleDisconnect}
-                address={walletAddress}
-              />
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-6 py-8">
+    <div className="flex-1 bg-[#F0F2F6]">
+      <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Page title */}
         <div className="mb-6">
           <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-1">
@@ -254,15 +212,7 @@ export default function PassportPage() {
                 : 'Connect MetaMask to view your Compliance Passport.'}
             </p>
             <div className="flex justify-center gap-3 flex-wrap">
-              {HAS_PRIVY ? (
-                <PrivyLoginButton
-                  onWalletReady={handlePrivyWalletReady}
-                  onDisconnect={handleDisconnect}
-                  address={null}
-                />
-              ) : (
-                <ConnectWalletButton onConnect={handleMetaMaskWalletReady} address={null} />
-              )}
+              <WalletConnectControl />
             </div>
           </div>
         )}
@@ -417,7 +367,7 @@ export default function PassportPage() {
             <TransactionTimeline transactions={passport.transactions} />
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 }
