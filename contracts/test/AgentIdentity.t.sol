@@ -159,8 +159,11 @@ contract AgentIdentityTest is Test {
 
     function test_linkAgent_onlyAgentRole() public {
         address id = _onboardPersonWithKyc();
+        bytes32 role = factory.AGENT_ROLE(); // read BEFORE prank (a call here would consume the prank)
         vm.prank(stranger);
-        vm.expectRevert(); // AccessControl: unauthorized
+        vm.expectRevert(
+            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", stranger, role)
+        );
         factory.linkAgent(agentA, id);
     }
 
@@ -168,6 +171,19 @@ contract AgentIdentityTest is Test {
         vm.prank(admin);
         vm.expectRevert(IdentityFactory.NotLinked.selector);
         factory.unlinkAgent(agentA);
+    }
+
+    /// @dev regression: unlinkAgent must NOT accept a person's own wallet (would brick their resolution)
+    function test_unlinkAgent_reverts_on_person_wallet() public {
+        address id = _onboardPersonWithKyc();
+        vm.prank(admin);
+        vm.expectRevert(IdentityFactory.NotLinked.selector);
+        factory.unlinkAgent(user); // `user` is a PERSON wallet, not an agent
+
+        // person is untouched: still resolves + still eligible
+        assertEq(factory.identityOfWallet(user), id, "person mapping intact");
+        (bool ok,) = gate.isEligible(id, POLICY);
+        assertTrue(ok, "person still eligible");
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────

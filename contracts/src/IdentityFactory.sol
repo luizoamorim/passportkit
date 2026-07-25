@@ -16,8 +16,9 @@ contract IdentityFactory is AccessControl {
     bytes32 public constant AGENT_ROLE = keccak256("AGENT_ROLE");
 
     address public immutable issuerRegistry;
-    mapping(address => address) public identityOfWallet; // wallet => identity
+    mapping(address => address) public identityOfWallet; // wallet => identity (person OR agent)
     mapping(address => bool) public isIdentity;          // identity we minted (guards linkAgent)
+    mapping(address => bool) public isAgent;             // wallet linked AS an agent (guards unlinkAgent)
 
     event IdentityCreated(address indexed wallet, address indexed identity);
     event AgentLinked(address indexed agentWallet, address indexed personIdentity);
@@ -60,15 +61,19 @@ contract IdentityFactory is AccessControl {
         if (!isIdentity[personIdentity]) revert NotAnIdentity();        // no pointing at garbage
         if (identityOfWallet[agentWallet] != address(0)) revert WalletInUse(); // not a person nor agent
         identityOfWallet[agentWallet] = personIdentity;
+        isAgent[agentWallet] = true;
         emit AgentLinked(agentWallet, personIdentity);
     }
 
     /// @notice Surgical lever: disown ONE agent without touching the person or their other agents.
     ///         The wallet resolves to address(0) again → every surface refuses it.
+    /// @dev    Guarded by `isAgent`, so it can ONLY unlink wallets linked as agents — never a person's
+    ///         own wallet (which would erase their wallet→identity resolution and brick every surface).
     function unlinkAgent(address agentWallet) external onlyRole(AGENT_ROLE) {
+        if (!isAgent[agentWallet]) revert NotLinked();     // person wallets / unknown wallets rejected
         address id = identityOfWallet[agentWallet];
-        if (id == address(0)) revert NotLinked();
         identityOfWallet[agentWallet] = address(0);
+        isAgent[agentWallet] = false;
         emit AgentUnlinked(agentWallet, id);
     }
 }
