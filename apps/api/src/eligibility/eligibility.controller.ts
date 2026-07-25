@@ -1,5 +1,6 @@
 import { Controller, Get, Param } from '@nestjs/common';
 import { type Address } from 'viem';
+import { normalizeAddress } from '../common/utils';
 import { EligibilityService, type EligibilityStatus } from './eligibility.service';
 
 /**
@@ -14,6 +15,6 @@ export class EligibilityController {
 
   @Get(':wallet')
   getStatus(@Param('wallet') wallet: string): Promise<EligibilityStatus> {
-    return this.eligibility.getStatus(wallet as Address);
+    return this.eligibility.getStatus(normalizeAddress(wallet) as Address); // 400 on invalid input
   }
 }

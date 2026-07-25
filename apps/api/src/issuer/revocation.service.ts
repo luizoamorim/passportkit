@@ -90,6 +90,15 @@ export class RevocationService {
     if (!this.account || !this.walletClient) {
       throw new Error('AGENT_PRIVATE_KEY not configured');
     }
+    if (this.claimIssuerAddress === ('0x' as Address) || this.claimIssuerAddress === zeroAddress) {
+      throw new Error('CLAIM_ISSUER_ADDRESS not configured');
+    }
+    if (
+      this.identityFactoryAddress === ('0x' as Address) ||
+      this.identityFactoryAddress === zeroAddress
+    ) {
+      throw new Error('IDENTITY_FACTORY_ADDRESS not configured');
+    }
 
     const identity = await this.resolveIdentity(params);
 
