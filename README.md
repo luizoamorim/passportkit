@@ -355,9 +355,14 @@ Then revoke a claim on `/markets` and watch all four change their answer.
 
 ```bash
 make demo RPC_PORT=8546 WEB_PORT=3010   # run a second world beside an existing one
-make demo-stop                          # stop only this demo's anvil and site
+make demo-stop                          # stop the site, and the chain only if make demo started it
 make up                                 # the full product stack: db + api + cre + web on :3000
 ```
+
+`make demo` reuses an anvil that is already listening rather than restarting it, and
+`make demo-stop` then leaves that chain running — it only kills a node it started itself.
+`make up` is the exception: it *replaces* the chain on :8545, which is `make demo`'s default
+port too, so give the demo its own `RPC_PORT` if you want both at once.
 
 `make hook-demo` and `make concierge-demo` still work — they print a deprecation notice
 and run `make demo`, since both standalone demos are now routes on this site.
