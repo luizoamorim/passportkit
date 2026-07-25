@@ -31,6 +31,7 @@ contract PassportResolver {
     event IdentitySet(bytes32 indexed node, bytes32 indexed parentNode, address identity);
 
     error NotController();
+    error ZeroController();
 
     /// @notice A tenant registers their gate/policy for their parent name.
     ///         (auth: in production, restrict to the parent's ENS owner.)
@@ -38,6 +39,7 @@ contract PassportResolver {
     ///      parentNode at onboarding); after that only the current controller can update.
     // NOTE: Production upgrade is full ENS-owner auth via NameWrapper.ownerOf(parentNode).
     function setTenant(bytes32 parentNode, address gate, uint256 policyId, address controller) external {
+        if (controller == address(0)) revert ZeroController(); // zero controller would brick setIdentity
         Tenant storage existing = tenantOf[parentNode];
         if (existing.controller != address(0) && msg.sender != existing.controller) revert NotController();
         tenantOf[parentNode] = Tenant(IEligibilityGate(gate), policyId, controller);
@@ -46,7 +48,7 @@ contract PassportResolver {
 
     /// @notice Bind a subname node to an identity. Called by the tenant's controller/registrar.
     function setIdentity(bytes32 node, bytes32 parentNode, address identity) external {
-        require(msg.sender == tenantOf[parentNode].controller, "not controller");
+        if (msg.sender != tenantOf[parentNode].controller) revert NotController();
         identityOf[node] = identity;
         parentOf[node] = parentNode;
         emit IdentitySet(node, parentNode, identity);

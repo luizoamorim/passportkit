@@ -84,7 +84,7 @@ contract PassportSubnameRegistrarTest is Test {
         // a parent whose controller is NOT the registrar -> resolver.setIdentity reverts
         bytes32 otherParent = keccak256("acme.eth");
         resolver.setTenant(otherParent, address(0xDEAD), policyId, address(0xCAFE));
-        vm.expectRevert(bytes("not controller"));
+        vm.expectRevert(PassportResolver.NotController.selector);
         registrar.issueSubname(otherParent, "bob", userWallet, identity);
     }
 

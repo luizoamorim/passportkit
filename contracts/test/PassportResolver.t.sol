@@ -56,7 +56,7 @@ contract PassportResolverTest is Test {
     function test_setIdentity_reverts_for_non_controller() public {
         bytes32 node2 = keccak256("bob.brandx.eth");
         vm.prank(address(0xBAD));
-        vm.expectRevert(bytes("not controller"));
+        vm.expectRevert(PassportResolver.NotController.selector);
         resolver.setIdentity(node2, parentNode, identity);
     }
 

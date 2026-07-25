@@ -41,8 +41,12 @@ contract PassportSubnameRegistrar is AccessControl {
     event SubnameIssued(bytes32 indexed parentNode, string label, address indexed userWallet, address identity);
 
     error ZeroAdmin();
+    error ZeroNameWrapper();
+    error ZeroResolver();
 
     constructor(address nameWrapper_, address resolver_, address admin) {
+        if (nameWrapper_ == address(0)) revert ZeroNameWrapper();
+        if (resolver_ == address(0)) revert ZeroResolver();
         if (admin == address(0)) revert ZeroAdmin();
         nameWrapper = INameWrapper(nameWrapper_);
         resolver = IPassportResolver(resolver_);
