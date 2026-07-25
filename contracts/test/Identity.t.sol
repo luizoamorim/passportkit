@@ -95,8 +95,34 @@ contract IdentityTest is Test {
         vm.prank(owner);
         id.submitClaim(kyc, address(issuer), sig, data, exp);
         vm.prank(stranger);
-        vm.expectRevert(Identity.NotAuthorized.selector);
+        vm.expectRevert(Identity.NoClaimKey.selector);
         id.revokeClaim(kyc, address(issuer));
+    }
+
+    /// Re-submitting the SAME (topic, issuer) updates in place and does NOT consume an extra
+    /// cap slot (prevents accidental TopicCap lockout).
+    function test_resubmit_same_pair_updates_in_place_no_cap_growth() public {
+        vm.startPrank(owner);
+        id.submitClaim(kyc, address(issuer), sig, hex"aa", exp);
+        id.submitClaim(kyc, address(issuer), sig, hex"bb", exp); // re-submit same pair
+        vm.stopPrank();
+        (bool exists,, bytes memory d) = id.getClaim(kyc, address(issuer));
+        assertTrue(exists);
+        assertEq(d, hex"bb"); // updated in place
+
+        // the re-submit consumed no extra slot: exactly (cap-1) new issuers still fit, then it caps
+        uint256 cap = id.MAX_CLAIMS_PER_TOPIC();
+        for (uint256 i = 1; i < cap; ++i) {
+            MockClaimIssuer mi = new MockClaimIssuer();
+            reg.setTrusted(address(mi), kyc, true);
+            vm.prank(owner);
+            id.submitClaim(kyc, address(mi), sig, data, exp);
+        }
+        MockClaimIssuer extra = new MockClaimIssuer();
+        reg.setTrusted(address(extra), kyc, true);
+        vm.prank(owner);
+        vm.expectRevert(Identity.TopicCap.selector);
+        id.submitClaim(kyc, address(extra), sig, data, exp);
     }
 
     function test_revokeClaim_nonexistent_reverts() public {

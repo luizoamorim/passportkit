@@ -49,7 +49,6 @@ contract Identity {
     error UntrustedIssuer();
     error BadSignature();
     error TopicCap();
-    error NotAuthorized();
     error NoClaimToRevoke();
 
     /// @param ownerWallet the user — seeded as MANAGEMENT (and thus effectively CLAIM, see keyHasPurpose)
@@ -107,7 +106,8 @@ contract Identity {
     /// @dev Model B: ONLY the holder (a CLAIM/MANAGEMENT key on their own identity) may remove.
     ///      The issuer is NOT a privileged writer here — it cannot hide a holder's claim.
     function revokeClaim(uint256 topic, address issuer) external {
-        if (!keyHasPurpose(keyForAddress(msg.sender), KeyPurpose.CLAIM)) revert NotAuthorized();
+        // same missing-CLAIM-key condition as submitClaim → same error (NoClaimKey)
+        if (!keyHasPurpose(keyForAddress(msg.sender), KeyPurpose.CLAIM)) revert NoClaimKey();
         Claim storage c = _claim[topic][issuer];
         if (!c.exists) revert NoClaimToRevoke(); // don't emit ClaimRevoked for a non-existent claim
         c.revoked = true;
