@@ -41,7 +41,7 @@ dataSources:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
-      entities: [RevocationLatch, Claim, ClaimEvent, SignerStatus, EligibilitySnapshot, PassportPolicyStatus]
+      entities: [RevocationLatch, Claim, ClaimEvent, SignerStatus, Identity, Issuer, EligibilitySnapshot, PassportPolicyStatus]
       abis:
         - name: ClaimIssuer
           file: ./abis/ClaimIssuer.json
@@ -64,7 +64,7 @@ dataSources:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
-      entities: [Issuer, IssuerTrust, Claim, EligibilitySnapshot, PassportPolicyStatus]
+      entities: [Issuer, IssuerTrust, Claim, Identity, EligibilitySnapshot, PassportPolicyStatus]
       abis:
         - name: IssuerRegistry
           file: ./abis/IssuerRegistry.json
@@ -142,7 +142,7 @@ dataSources:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
-      entities: [Subname]
+      entities: [Subname, Identity]
       abis:
         - name: PassportSubnameRegistrar
           file: ./abis/PassportSubnameRegistrar.json
@@ -179,7 +179,7 @@ templates:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
-      entities: [Claim, ClaimEvent, EligibilitySnapshot, PassportPolicyStatus]
+      entities: [Claim, ClaimEvent, Identity, Issuer, IssuerTrust, EligibilitySnapshot, PassportPolicyStatus]
       abis:
         - name: Identity
           file: ./abis/Identity.json

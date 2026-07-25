@@ -11,7 +11,9 @@ export function handleRevocationSet(event: RevocationSet): void {
   getOrCreateIssuer(issuerAddr);
   const identity = getOrCreateIdentity(identityAddr, event);
 
-  const latchId = identityAddr.toHexString() + '-' + topic.toString();
+  // issuer is part of the id: each ClaimIssuer holds its own latch map, and a
+  // second trusted issuer must not collide with the first
+  const latchId = identityAddr.toHexString() + '-' + topic.toString() + '-' + issuerAddr.toHexString();
   let latch = RevocationLatch.load(latchId);
   if (latch == null) {
     latch = new RevocationLatch(latchId);

@@ -59,9 +59,9 @@ type Claim @entity(immutable: false) {
   updatedAt: BigInt!
 }
 
-# The issuer-held revocation latch, per identity+topic (ClaimIssuer.revoked).
+# The issuer-held revocation latch, per identity+topic+issuer (ClaimIssuer.revoked).
 type RevocationLatch @entity(immutable: false) {
-  id: String!                      # identity-topic
+  id: String!                      # identity-topic-issuer
   identity: Identity!
   issuer: Issuer!                  # the ClaimIssuer holding the latch
   topic: BigInt!
