@@ -8,11 +8,13 @@ import {
   createPublicClient,
   createWalletClient,
   http as httpTransport,
+  decodeAbiParameters,
   encodeAbiParameters,
   formatEther,
   keccak256,
   toHex,
   pad,
+  zeroAddress,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry, sepolia } from 'viem/chains';
@@ -50,16 +52,25 @@ const KEYS = {
   rui: ENV.RUI_PK ?? '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
 };
 
-const CLAIM_TYPES = {
-  kyc: keccak256(toHex('KYC_AML_VERIFIED')),
-  accredited: keccak256(toHex('ACCREDITED_INVESTOR')),
+// the operator key doubles as the ClaimIssuer's authorized EIP-712 signer
+const issuerSigner = privateKeyToAccount(KEYS.operator);
+
+const ZERO_ADDRESS = zeroAddress;
+
+// Identity claim payload: abi.encode(dataHash, expiresAt, nonce) — a hash, never PII
+const CLAIM_DATA_ABI = [{ type: 'bytes32' }, { type: 'uint64' }, { type: 'bytes32' }];
+
+// ERC-735 topics: uint256(keccak256(name)) — same numbers as libraries/Types.sol
+const CLAIM_TOPICS = {
+  kyc: BigInt(keccak256(toHex('KYC_VERIFIED'))),
+  accredited: BigInt(keccak256(toHex('ACCREDITED_INVESTOR'))),
 };
-const CLAIM_TYPE_NAMES = {
-  [CLAIM_TYPES.kyc]: 'KYC_AML_VERIFIED',
-  [CLAIM_TYPES.accredited]: 'ACCREDITED_INVESTOR',
+const CLAIM_TOPIC_NAMES = {
+  [CLAIM_TOPICS.kyc]: 'KYC_VERIFIED',
+  [CLAIM_TOPICS.accredited]: 'ACCREDITED_INVESTOR',
 };
-const CLAIM_STATUS = ['UNVERIFIED', 'VERIFIED', 'FAILED', 'EXPIRED', 'REVOKED'];
-const PASSPORT_STATUS = ['NONE', 'IN_PROGRESS', 'LIMITED', 'GREEN', 'RED', 'REVOKED', 'EXPIRED'];
+// ERC-734 key purposes (Types.sol KeyPurpose)
+const KEY_PURPOSES = { 1n: 'MANAGEMENT', 2n: 'ACTION', 3n: 'CLAIM' };
 
 const MIN_SQRT_PRICE_PLUS_1 = 4295128740n;
 const MAX_SQRT_PRICE_MINUS_1 = 1461446703485210103287273052203988822378723970341n;
@@ -129,67 +140,55 @@ const LIQUIDITY_ROUTER_ABI = [
   },
 ];
 
-const REGISTRY_ABI = [
+// Identity (ERC-735) — Model B: the HOLDER submits their own issuer-signed claim
+const IDENTITY_ABI = [
   {
     type: 'function',
     name: 'submitClaim',
     stateMutability: 'nonpayable',
-    inputs: [
-      { type: 'address' },
-      { type: 'bytes32' },
-      { type: 'bool' },
-      { type: 'bytes32' },
-      { type: 'bytes32' },
-      { type: 'uint64' },
-    ],
-    outputs: [],
-  },
-  {
-    type: 'function',
-    name: 'revokeClaim',
-    stateMutability: 'nonpayable',
-    inputs: [{ type: 'address' }, { type: 'bytes32' }],
-    outputs: [],
+    inputs: [{ type: 'uint256' }, { type: 'address' }, { type: 'bytes' }, { type: 'bytes' }],
+    outputs: [{ type: 'bytes32' }],
   },
   {
     type: 'function',
     name: 'getClaim',
     stateMutability: 'view',
-    inputs: [{ type: 'address' }, { type: 'bytes32' }],
-    outputs: [
-      {
-        type: 'tuple',
-        components: [
-          { name: 'status', type: 'uint8' },
-          { name: 'approved', type: 'bool' },
-          { name: 'issuer', type: 'address' },
-          { name: 'attestationHash', type: 'bytes32' },
-          { name: 'verificationIdHash', type: 'bytes32' },
-          { name: 'expiresAt', type: 'uint64' },
-          { name: 'updatedAt', type: 'uint64' },
-        ],
-      },
-    ],
+    inputs: [{ type: 'uint256' }, { type: 'address' }],
+    outputs: [{ type: 'bool' }, { type: 'bytes' }, { type: 'bytes' }],
+  },
+];
+
+const FACTORY_ABI = [
+  { type: 'function', name: 'identityOfWallet', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'createIdentity', stateMutability: 'nonpayable', inputs: [{ type: 'address' }], outputs: [{ type: 'address' }] },
+];
+
+// ClaimIssuer — signs off-chain (EIP-712) and holds the revocation latch
+const ISSUER_ABI = [
+  {
+    type: 'function',
+    name: 'setRevoked',
+    stateMutability: 'nonpayable',
+    inputs: [{ type: 'address' }, { type: 'uint256' }, { type: 'bool' }],
+    outputs: [],
   },
   {
     type: 'function',
-    name: 'hasValidClaim',
+    name: 'revoked',
     stateMutability: 'view',
-    inputs: [{ type: 'address' }, { type: 'bytes32' }],
+    inputs: [{ type: 'address' }, { type: 'uint256' }],
     outputs: [{ type: 'bool' }],
   },
 ];
 
-const PASSPORT_ABI = [
-  { type: 'function', name: 'syncPassport', stateMutability: 'nonpayable', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }, { type: 'uint8' }] },
-  { type: 'function', name: 'revokePassport', stateMutability: 'nonpayable', inputs: [{ type: 'address' }], outputs: [] },
-  { type: 'function', name: 'statusOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint8' }] },
-  { type: 'function', name: 'tokenIdOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
-];
-
 const GATE_ABI = [
-  { type: 'function', name: 'canAccessDealRoom', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'canAccessInvestorArea', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'bool' }] },
+  {
+    type: 'function',
+    name: 'isEligible',
+    stateMutability: 'view',
+    inputs: [{ type: 'address' }, { type: 'uint256' }],
+    outputs: [{ type: 'bool' }, { type: 'bytes32' }],
+  },
 ];
 
 const HOOK_ABI = [
@@ -204,52 +203,55 @@ const ERC20_ABI = [
 const INSPECTOR_EVENTS = [
   {
     type: 'event',
-    name: 'ClaimUpdated',
+    name: 'IdentityCreated',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'claimType', type: 'bytes32', indexed: true },
-      { name: 'status', type: 'uint8', indexed: false },
-      { name: 'approved', type: 'bool', indexed: false },
-      { name: 'verificationIdHash', type: 'bytes32', indexed: true },
-      { name: 'attestationHash', type: 'bytes32', indexed: false },
-      { name: 'expiresAt', type: 'uint64', indexed: false },
+      { name: 'wallet', type: 'address', indexed: true },
+      { name: 'identity', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'ClaimAdded',
+    inputs: [
+      { name: 'claimId', type: 'bytes32', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
     ],
   },
   {
     type: 'event',
     name: 'ClaimRevoked',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'claimType', type: 'bytes32', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
     ],
   },
   {
     type: 'event',
-    name: 'PassportMinted',
+    name: 'RevocationSet',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'tokenId', type: 'uint256', indexed: true },
-      { name: 'status', type: 'uint8', indexed: false },
+      { name: 'identity', type: 'address', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'revoked', type: 'bool', indexed: false },
     ],
   },
   {
     type: 'event',
-    name: 'PassportStatusUpdated',
+    name: 'KeyAdded',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'tokenId', type: 'uint256', indexed: true },
-      { name: 'status', type: 'uint8', indexed: false },
+      { name: 'key', type: 'bytes32', indexed: true },
+      { name: 'purpose', type: 'uint256', indexed: true },
     ],
   },
   {
     type: 'event',
-    name: 'PassportRevoked',
+    name: 'TrustedSet',
     inputs: [
-      { name: 'user', type: 'address', indexed: true },
-      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'ok', type: 'bool', indexed: false },
     ],
   },
-  { type: 'event', name: 'Locked', inputs: [{ name: 'tokenId', type: 'uint256', indexed: false }] },
   MODIFY_LIQUIDITY_EVENT,
   SWAP_EVENT,
   {
@@ -323,9 +325,20 @@ function loadWorld() {
   );
   actorAddress = Object.fromEntries(Object.entries(wallets).map(([n, w]) => [n, w.account.address]));
   const base = { currency0: A.token0, currency1: A.token1, fee: A.fee, tickSpacing: A.tickSpacing };
+  const policies = A.policies ?? { deal: 1, investor: 2 };
   pools = {
-    deal: { key: { ...base, hooks: A.dealHook }, id: poolIdOf({ ...base, hooks: A.dealHook }), hook: A.dealHook },
-    investor: { key: { ...base, hooks: A.investorHook }, id: poolIdOf({ ...base, hooks: A.investorHook }), hook: A.investorHook },
+    deal: {
+      key: { ...base, hooks: A.dealHook },
+      id: poolIdOf({ ...base, hooks: A.dealHook }),
+      hook: A.dealHook,
+      policyId: BigInt(policies.deal),
+    },
+    investor: {
+      key: { ...base, hooks: A.investorHook },
+      id: poolIdOf({ ...base, hooks: A.investorHook }),
+      hook: A.investorHook,
+      policyId: BigInt(policies.investor),
+    },
   };
   logCache = { nextBlock: BigInt(A.deployBlock ?? 0), logs: [] };
 }
@@ -433,39 +446,69 @@ function deltasBetween(before, after) {
   );
 }
 
-async function claimState(wallet, claimType, now) {
-  const c = await publicClient.readContract({
-    address: A.claimRegistry,
-    abi: REGISTRY_ABI,
-    functionName: 'getClaim',
-    args: [wallet, claimType],
+async function identityOf(wallet) {
+  const identity = await publicClient.readContract({
+    address: A.identityFactory,
+    abi: FACTORY_ABI,
+    functionName: 'identityOfWallet',
+    args: [wallet],
   });
-  const expired = c.expiresAt !== 0n && now > Number(c.expiresAt) && CLAIM_STATUS[c.status] === 'VERIFIED';
+  return identity === ZERO_ADDRESS ? null : identity;
+}
+
+/// Status of one topic on an identity: what the ISSUER thinks of the stored claim.
+async function claimState(identity, topic, now) {
+  if (!identity) return { status: 'UNVERIFIED', expiresAt: null };
+  const [exists, , data] = await publicClient.readContract({
+    address: identity,
+    abi: IDENTITY_ABI,
+    functionName: 'getClaim',
+    args: [topic, A.claimIssuer],
+  });
+  if (!exists) return { status: 'UNVERIFIED', expiresAt: null };
+
+  const [, expiresAt] = decodeAbiParameters(CLAIM_DATA_ABI, data);
+  const revoked = await publicClient.readContract({
+    address: A.claimIssuer,
+    abi: ISSUER_ABI,
+    functionName: 'revoked',
+    args: [identity, topic],
+  });
+  const expired = expiresAt !== 0n && now > Number(expiresAt);
   return {
-    status: expired ? 'EXPIRED' : CLAIM_STATUS[c.status],
-    expiresAt: c.expiresAt === 0n ? null : Number(c.expiresAt),
+    status: revoked ? 'REVOKED' : expired ? 'EXPIRED' : 'VERIFIED',
+    expiresAt: expiresAt === 0n ? null : Number(expiresAt),
   };
 }
 
 async function actorState(name, now, positions) {
   const wallet = actorAddress[name];
-  const [statusIdx, tokenId, dealOk, investorOk, dealReason, investorReason] = await Promise.all([
-    publicClient.readContract({ address: A.compliancePassport, abi: PASSPORT_ABI, functionName: 'statusOf', args: [wallet] }),
-    publicClient.readContract({ address: A.compliancePassport, abi: PASSPORT_ABI, functionName: 'tokenIdOf', args: [wallet] }),
-    publicClient.readContract({ address: A.accessGate, abi: GATE_ABI, functionName: 'canAccessDealRoom', args: [wallet] }),
-    publicClient.readContract({ address: A.accessGate, abi: GATE_ABI, functionName: 'canAccessInvestorArea', args: [wallet] }),
-    publicClient.readContract({ address: A.dealHook, abi: HOOK_ABI, functionName: 'reasonFor', args: [wallet] }),
-    publicClient.readContract({ address: A.investorHook, abi: HOOK_ABI, functionName: 'reasonFor', args: [wallet] }),
+  const identity = await identityOf(wallet);
+  const gateFor = (policyId) =>
+    publicClient.readContract({
+      address: A.eligibilityGate,
+      abi: GATE_ABI,
+      functionName: 'isEligible',
+      args: [identity ?? ZERO_ADDRESS, policyId],
+    });
+  const reasonFor = (hook) =>
+    publicClient.readContract({ address: hook, abi: HOOK_ABI, functionName: 'reasonFor', args: [wallet] });
+
+  const [[dealOk], [investorOk], dealReason, investorReason] = await Promise.all([
+    gateFor(pools.deal.policyId),
+    gateFor(pools.investor.policyId),
+    reasonFor(A.dealHook),
+    reasonFor(A.investorHook),
   ]);
   const b32ToString = (h) => Buffer.from(h.slice(2), 'hex').toString('utf8').replace(/\0+$/g, '');
   const salt = saltOf(wallet);
   return {
     name,
     wallet,
-    passport: { status: PASSPORT_STATUS[statusIdx], tokenId: Number(tokenId) },
+    identity,
     claims: {
-      kyc: await claimState(wallet, CLAIM_TYPES.kyc, now),
-      accredited: await claimState(wallet, CLAIM_TYPES.accredited, now),
+      kyc: await claimState(identity, CLAIM_TOPICS.kyc, now),
+      accredited: await claimState(identity, CLAIM_TOPICS.accredited, now),
     },
     access: {
       deal: { allowed: dealOk, reason: b32ToString(dealReason) || null },
@@ -517,32 +560,85 @@ async function doLiquidity(actor, poolName, direction) {
   };
 }
 
+/// The issuer signs a claim OFF-CHAIN (EIP-712, no gas). Both keys are local anvil keys,
+/// so the demo plays both sides: operator = issuer signer, the actor = holder.
+async function signClaim(identity, topic, expiresAt) {
+  const dataHash = keccak256(toHex(`demo-attest-${Date.now()}-${verificationCounter++}`));
+  const nonce = keccak256(toHex(`demo-session-${Date.now()}-${verificationCounter++}`));
+  const signature = await issuerSigner.signTypedData({
+    domain: { name: 'PassportKitClaim', version: '1', chainId: A.chainId, verifyingContract: A.claimIssuer },
+    types: {
+      Claim: [
+        { name: 'identity', type: 'address' },
+        { name: 'topic', type: 'uint256' },
+        { name: 'dataHash', type: 'bytes32' },
+        { name: 'expiresAt', type: 'uint64' },
+        { name: 'nonce', type: 'bytes32' },
+      ],
+    },
+    primaryType: 'Claim',
+    message: { identity, topic, dataHash, expiresAt, nonce },
+  });
+  return { signature, data: encodeAbiParameters(CLAIM_DATA_ABI, [dataHash, expiresAt, nonce]) };
+}
+
+async function setRevoked(identity, topic, value) {
+  return write('operator', A.claimIssuer, ISSUER_ABI, 'setRevoked', [identity, topic, value]);
+}
+
+/// "Verify" = mint the identity if needed, re-open the issuer latch if it was closed,
+/// sign the claim as the issuer, then submit it FROM THE HOLDER's wallet (Model B).
+/// approved=false is the issuer refusing: it closes the latch instead.
 async function doVerify(actor, claim, approved) {
   const wallet = actorAddress[actor];
+  const topic = CLAIM_TOPICS[claim];
+  const txHashes = [];
+
+  let identity = await identityOf(wallet);
+  if (!identity) {
+    txHashes.push(await write('operator', A.identityFactory, FACTORY_ABI, 'createIdentity', [wallet]));
+    identity = await identityOf(wallet);
+    A.identities = { ...(A.identities ?? {}), [actor]: identity }; // keep the inspector labels honest
+  }
+  if (!approved) {
+    txHashes.push(await setRevoked(identity, topic, true));
+    return { ok: true, txHashes };
+  }
+
+  // the latch blocks re-submission — issuer re-approval comes first
+  const revoked = await publicClient.readContract({
+    address: A.claimIssuer, abi: ISSUER_ABI, functionName: 'revoked', args: [identity, topic],
+  });
+  if (revoked) txHashes.push(await setRevoked(identity, topic, false));
+
   const expiresAt = BigInt((await chainNow()) + 365 * 24 * 3600);
-  const verificationIdHash = keccak256(toHex(`demo-${Date.now()}-${verificationCounter++}`));
-  const txHashes = [
-    await write('operator', A.claimRegistry, REGISTRY_ABI, 'submitClaim', [
-      wallet, CLAIM_TYPES[claim], approved, verificationIdHash, keccak256(toHex('demo-attest')), expiresAt,
-    ]),
-    await write('operator', A.compliancePassport, PASSPORT_ABI, 'syncPassport', [wallet]),
-  ];
+  const { signature, data } = await signClaim(identity, topic, expiresAt);
+  txHashes.push(await write(actor, identity, IDENTITY_ABI, 'submitClaim', [topic, A.claimIssuer, signature, data]));
   return { ok: true, txHashes };
 }
 
+/// THE MONEY MOMENT: one latch flip and every surface refuses this identity.
 async function doRevokeClaim(actor, claim) {
-  const wallet = actorAddress[actor];
-  const txHashes = [
-    await write('operator', A.claimRegistry, REGISTRY_ABI, 'revokeClaim', [wallet, CLAIM_TYPES[claim]]),
-    await write('operator', A.compliancePassport, PASSPORT_ABI, 'syncPassport', [wallet]),
-  ];
-  return { ok: true, txHashes };
+  const identity = await identityOf(actorAddress[actor]);
+  if (!identity) return { ok: false, reason: 'NO_IDENTITY', message: `${actor} has no identity yet` };
+  return { ok: true, txHashes: [await setRevoked(identity, CLAIM_TOPICS[claim], true)] };
 }
 
-async function doRevokePassport(actor) {
-  const wallet = actorAddress[actor];
-  const txHash = await write('operator', A.compliancePassport, PASSPORT_ABI, 'revokePassport', [wallet]);
-  return { ok: true, txHashes: [txHash] };
+/// Issuer re-approval: re-open the latch. The claim is still on the identity, so the
+/// wallet is eligible again immediately — no re-submission needed.
+async function doRestoreClaim(actor, claim) {
+  const identity = await identityOf(actorAddress[actor]);
+  if (!identity) return { ok: false, reason: 'NO_IDENTITY', message: `${actor} has no identity yet` };
+  return { ok: true, txHashes: [await setRevoked(identity, CLAIM_TOPICS[claim], false)] };
+}
+
+/// Revoke every topic at once — the whole identity goes dark on every surface.
+async function doRevokeIdentity(actor) {
+  const identity = await identityOf(actorAddress[actor]);
+  if (!identity) return { ok: false, reason: 'NO_IDENTITY', message: `${actor} has no identity yet` };
+  const txHashes = [];
+  for (const topic of Object.values(CLAIM_TOPICS)) txHashes.push(await setRevoked(identity, topic, true));
+  return { ok: true, txHashes };
 }
 
 async function doTimewarp(days) {
@@ -571,10 +667,10 @@ async function doReset() {
 // ---------------------------------------------------------------- tx inspector
 
 function friendlyArg(name, value) {
-  if (name === 'claimType' && CLAIM_TYPE_NAMES[value]) return CLAIM_TYPE_NAMES[value];
-  if (name === 'status' && typeof value === 'number') return PASSPORT_STATUS[value] ?? CLAIM_STATUS[value] ?? value;
+  if (name === 'topic' && CLAIM_TOPIC_NAMES[value]) return CLAIM_TOPIC_NAMES[value];
+  if (name === 'purpose' && typeof value === 'bigint') return KEY_PURPOSES[value] ?? value.toString();
   if (typeof value === 'bigint') {
-    if (name === 'expiresAt' || name === 'tokenId' || name === 'fee') return value.toString();
+    if (name === 'expiresAt' || name === 'topic' || name === 'fee') return value.toString();
     const abs = value < 0n ? -value : value;
     if (abs >= 10n ** 12n) return `${Number(formatEther(value)).toFixed(4)}e18`;
     return value.toString();
@@ -585,9 +681,10 @@ function friendlyArg(name, value) {
 function contractLabel(address) {
   const a = address.toLowerCase();
   const map = {
-    [A.claimRegistry.toLowerCase()]: 'ClaimRegistry',
-    [A.compliancePassport.toLowerCase()]: 'CompliancePassport',
-    [A.accessGate.toLowerCase()]: 'AccessGate',
+    [A.issuerRegistry.toLowerCase()]: 'IssuerRegistry',
+    [A.claimIssuer.toLowerCase()]: 'ClaimIssuer',
+    [A.identityFactory.toLowerCase()]: 'IdentityFactory',
+    [A.eligibilityGate.toLowerCase()]: 'EligibilityGate',
     [A.poolManager.toLowerCase()]: 'PoolManager',
     [A.swapRouter.toLowerCase()]: 'SwapRouter',
     [A.liquidityRouter.toLowerCase()]: 'LiquidityRouter',
@@ -596,6 +693,9 @@ function contractLabel(address) {
     [A.dealHook.toLowerCase()]: 'ComplianceHook (deal)',
     [A.investorHook.toLowerCase()]: 'ComplianceHook (investor)',
   };
+  for (const [name, identity] of Object.entries(A.identities ?? {})) {
+    map[identity.toLowerCase()] = `Identity (${name})`;
+  }
   return map[a] ?? short(address);
 }
 
@@ -702,9 +802,10 @@ const server = http.createServer(async (req, res) => {
         explorer: EXPLORER_URL,
         chainId: A.chainId,
         contracts: {
-          claimRegistry: A.claimRegistry,
-          compliancePassport: A.compliancePassport,
-          accessGate: A.accessGate,
+          issuerRegistry: A.issuerRegistry,
+          claimIssuer: A.claimIssuer,
+          identityFactory: A.identityFactory,
+          eligibilityGate: A.eligibilityGate,
           poolManager: A.poolManager,
           dealHook: A.dealHook,
           investorHook: A.investorHook,
@@ -715,6 +816,7 @@ const server = http.createServer(async (req, res) => {
             name,
             {
               hook: p.hook,
+              policyId: Number(p.policyId),
               liquidity: Number(formatEther(totals.get(p.id) ?? 0n)).toFixed(0),
               price: (prices.get(p.id) ?? 1).toFixed(4),
             },
@@ -735,16 +837,20 @@ const server = http.createServer(async (req, res) => {
       json(res, 200, await doLiquidity(actor, pool, direction).catch(failure));
     } else if (req.method === 'POST' && url.pathname === '/api/verify') {
       const { actor, claim, approved = true } = await readBody(req);
-      if (!wallets[actor] || !CLAIM_TYPES[claim]) return json(res, 400, { ok: false, message: 'unknown actor or claim' });
+      if (!wallets[actor] || !CLAIM_TOPICS[claim]) return json(res, 400, { ok: false, message: 'unknown actor or claim' });
       json(res, 200, await doVerify(actor, claim, Boolean(approved)).catch(failure));
     } else if (req.method === 'POST' && url.pathname === '/api/revoke-claim') {
       const { actor, claim } = await readBody(req);
-      if (!wallets[actor] || !CLAIM_TYPES[claim]) return json(res, 400, { ok: false, message: 'unknown actor or claim' });
+      if (!wallets[actor] || !CLAIM_TOPICS[claim]) return json(res, 400, { ok: false, message: 'unknown actor or claim' });
       json(res, 200, await doRevokeClaim(actor, claim).catch(failure));
+    } else if (req.method === 'POST' && url.pathname === '/api/restore-claim') {
+      const { actor, claim } = await readBody(req);
+      if (!wallets[actor] || !CLAIM_TOPICS[claim]) return json(res, 400, { ok: false, message: 'unknown actor or claim' });
+      json(res, 200, await doRestoreClaim(actor, claim).catch(failure));
     } else if (req.method === 'POST' && url.pathname === '/api/revoke-passport') {
       const { actor } = await readBody(req);
       if (!wallets[actor]) return json(res, 400, { ok: false, message: 'unknown actor' });
-      json(res, 200, await doRevokePassport(actor).catch(failure));
+      json(res, 200, await doRevokeIdentity(actor).catch(failure));
     } else if (req.method === 'POST' && url.pathname === '/api/timewarp') {
       const { days = 366 } = await readBody(req);
       json(res, 200, await doTimewarp(Number(days)).catch(failure));

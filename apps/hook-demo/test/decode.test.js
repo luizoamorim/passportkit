@@ -21,9 +21,9 @@ function wrapped(reason) {
 }
 
 test('decodes a v4-wrapped NotCompliant revert into wallet + reason', () => {
-  assert.deepEqual(decodeNotCompliant(wrapped('KYC_MISSING')), {
+  assert.deepEqual(decodeNotCompliant(wrapped('MISSING_KYC')), {
     wallet: WALLET,
-    reason: 'KYC_MISSING',
+    reason: 'MISSING_KYC',
   });
 });
 
@@ -31,9 +31,9 @@ test('decodes a bare NotCompliant revert', () => {
   const inner = encodeErrorResult({
     abi: NOT_COMPLIANT_ABI,
     errorName: 'NotCompliant',
-    args: [WALLET, stringToHex('PASSPORT_REVOKED', { size: 32 })],
+    args: [WALLET, stringToHex('NO_IDENTITY', { size: 32 })],
   });
-  assert.deepEqual(decodeNotCompliant(inner), { wallet: WALLET, reason: 'PASSPORT_REVOKED' });
+  assert.deepEqual(decodeNotCompliant(inner), { wallet: WALLET, reason: 'NO_IDENTITY' });
 });
 
 test('returns null for unrelated revert data or missing input', () => {
@@ -43,10 +43,10 @@ test('returns null for unrelated revert data or missing input', () => {
 
 test('finds revert data nested in viem error objects (data or raw)', () => {
   const viaData = new Error('reverted');
-  viaData.cause = { cause: { data: wrapped('ACCREDITATION_MISSING') } };
-  assert.deepEqual(decodeNotCompliant(viaData), { wallet: WALLET, reason: 'ACCREDITATION_MISSING' });
+  viaData.cause = { cause: { data: wrapped('MISSING_ACCREDITED') } };
+  assert.deepEqual(decodeNotCompliant(viaData), { wallet: WALLET, reason: 'MISSING_ACCREDITED' });
 
   const viaRaw = new Error('reverted');
-  viaRaw.cause = { raw: wrapped('KYC_EXPIRED') };
-  assert.deepEqual(decodeNotCompliant(viaRaw), { wallet: WALLET, reason: 'KYC_EXPIRED' });
+  viaRaw.cause = { raw: wrapped('NO_POLICY') };
+  assert.deepEqual(decodeNotCompliant(viaRaw), { wallet: WALLET, reason: 'NO_POLICY' });
 });

@@ -8,9 +8,13 @@ solc = "0.8.26"
 optimizer = true
 optimizer_runs = 200
 evm_version = "cancun"
+# DeployHookDemo.s.sol writes ../apps/hook-demo/addresses.json
+# DeployConciergeDemo.s.sol writes ../apps/concierge/addresses.json
+# DeployPassportKit.s.sol writes deployments/<chainid>.json (addresses + startBlock for the subgraph/.env)
 fs_permissions = [
     { access = "read-write", path = "../apps/hook-demo/" },
     { access = "read-write", path = "../apps/concierge/" },
+    { access = "write", path = "./deployments" },
 ]
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
