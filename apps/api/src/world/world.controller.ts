@@ -1,10 +1,10 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { IsEthereumAddress, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsEthereumAddress, IsIn, IsObject, IsOptional } from 'class-validator';
 import { keccak256, toHex, type Address, type Hex } from 'viem';
 import { randomBytes } from 'crypto';
 import { IssuerSigningService } from '../issuer/issuer-signing.service';
 import { CLAIM_TOPICS, type ClaimTopicName } from '../issuer/claim-topics';
-import { WorldService, type WorldKind, type WorldProof } from './world.service';
+import { WorldService, type WorldKind, type WorldResult } from './world.service';
 
 /** kind -> the real claim topic it proves. */
 const TOPIC_FOR_KIND: Record<WorldKind, ClaimTopicName> = {
@@ -12,11 +12,9 @@ const TOPIC_FOR_KIND: Record<WorldKind, ClaimTopicName> = {
   document: 'KYC_VERIFIED',
 };
 
-class WorldProofDto implements WorldProof {
-  @IsString() merkle_root!: string;
-  @IsString() nullifier_hash!: string;
-  @IsString() proof!: string;
-  @IsOptional() @IsString() verification_level?: string;
+class WorldRequestDto {
+  @IsIn(['selfie', 'document'])
+  kind!: WorldKind;
 }
 
 class WorldVerifyDto {
@@ -27,18 +25,23 @@ class WorldVerifyDto {
   kind!: WorldKind;
 
   @IsObject()
-  proof!: WorldProofDto;
+  result!: WorldResult; // the IDKitResult from the widget (Groth16 proof — never PII)
+
+  @IsOptional()
+  @IsObject()
+  rp_context?: Record<string, unknown>; // echoed back for reference; validation uses `result`
 }
 
 /**
- * WorldController — World ID proof -> signed claim (Model B).
+ * WorldController — World ID v4 flow (Model B).
  *
- * The demo's ONE real verification. It validates the World proof, then reuses IssuerSigningService to
- * sign the matching claim; the USER submits it to their own Identity (we never write for them). Zero
- * PII: the on-chain data anchors to keccak256({ world, kind, nullifier }), a hash — never PII.
+ * Two steps mirror the v4 RP-signature handshake:
+ *   POST /world/request { kind }          -> { app_id, action, rp_context }  (RP-signed; open the widget)
+ *   POST /world/verify  { identity, kind, result } -> a signed claim the USER submits to their Identity
  *
- * Unlike /issuer/mock-claim this is NOT DEMO_MODE-gated: a real World proof IS the authorization. When
- * WORLD_APP_ID is unset the service degrades to a labeled mock only inside DEMO_MODE.
+ * The demo's ONE real verification. Zero PII: the on-chain data anchors to
+ * keccak256({ world, kind, nullifier }) — a hash, never PII. Not DEMO_MODE-gated: a real World proof IS
+ * the authorization; when keys are unset the service degrades to a labeled mock only inside DEMO_MODE.
  */
 @Controller('world')
 export class WorldController {
@@ -47,16 +50,21 @@ export class WorldController {
     private readonly signing: IssuerSigningService,
   ) {}
 
+  @Post('request')
+  request(@Body() dto: WorldRequestDto) {
+    return this.world.buildRequest(dto.kind);
+  }
+
   @Post('verify')
   async verify(@Body() dto: WorldVerifyDto) {
-    const result = await this.world.verify(dto.kind, dto.proof);
+    const verified = this.world.verifyResult(dto.kind, dto.result);
 
     const topicName = TOPIC_FOR_KIND[dto.kind];
     // Sanitized reference: a hash of the flow + nullifier. NEVER PII, never the proof.
     const evidence = JSON.stringify({
       world: true,
       kind: dto.kind,
-      nullifier: result.nullifierHash,
+      nullifier: verified.nullifierHash,
     });
     const dataHash = keccak256(toHex(evidence)) as Hex;
     const nonce = `0x${randomBytes(32).toString('hex')}` as Hex;
@@ -73,8 +81,9 @@ export class WorldController {
     // Everything the frontend needs for Identity.submitClaim(topic, issuer, sig, data):
     return {
       world: true,
-      mock: result.mock,
+      mock: verified.mock,
       kind: dto.kind,
+      credential: verified.credential,
       topicName,
       topic: signed.topic.toString(),
       issuer: signed.issuer,
