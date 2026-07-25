@@ -16,11 +16,13 @@ import {ClaimTopics} from "../src/libraries/Types.sol";
  * Deploy + wire the PassportKit stack on Ethereum Sepolia.
  *
  * Roles:
- *   - deployer (DEPLOYER_PRIVATE_KEY) = admin of IssuerRegistry + EligibilityGate (so this script
- *     can wire setTrusted / setPolicy at deploy time).
- *   - agent (AGENT_ADDRESS, defaults to deployer) = the backend's on-chain key: AGENT_ROLE on
- *     ClaimIssuer (setRevoked) + IdentityFactory (createIdentity), MINTER_ROLE on GatedERC20,
- *     ISSUER_ROLE on the SubnameRegistrar.
+ *   - deployer (DEPLOYER_PRIVATE_KEY) = DEFAULT_ADMIN_ROLE on IssuerRegistry + EligibilityGate,
+ *     so this script can wire setTrusted / setPolicy at deploy time.
+ *   - agent (AGENT_ADDRESS, defaults to deployer) = the backend's on-chain key. Each of these
+ *     constructors grants it DEFAULT_ADMIN_ROLE *and* the operator role: ClaimIssuer (AGENT_ROLE,
+ *     setRevoked), IdentityFactory (AGENT_ROLE, createIdentity), GatedERC20 (MINTER_ROLE),
+ *     PassportSubnameRegistrar (ISSUER_ROLE). For the demo one key is admin+operator; a production
+ *     deployment should split admin from operator.
  *   - signer (ISSUER_SIGNER_ADDRESS, defaults to deployer) = the ClaimIssuer's authorized EIP-712 signer.
  *
  * Env: DEPLOYER_PRIVATE_KEY, AGENT_ADDRESS?, ISSUER_SIGNER_ADDRESS?, ENS_NAMEWRAPPER_ADDRESS?,
@@ -91,8 +93,9 @@ contract DeployPassportKit is Script {
         resolverAddr = address(resolver);
         subnamesAddr = address(new PassportSubnameRegistrar(nameWrapper, address(resolver), agentAddr));
 
-        // 5. ENS tenant wiring (only if a parent node is provided).
-        //    controller = the registrar so it can bind subnames via resolver.setIdentity.
+        // 5. ENS tenant wiring (only if a parent node is provided). Set-once for the demo:
+        //    controller = the registrar so it can bind subnames via resolver.setIdentity. The
+        //    tenant's gate/policy are not rotated afterwards (would need an admin path on the resolver).
         if (parentNode != bytes32(0)) {
             resolver.setTenant(parentNode, address(gate), 1, subnamesAddr);
         }
@@ -120,7 +123,7 @@ contract DeployPassportKit is Script {
         console2.log("issuer signer             ", signerAddr);
         console2.log("startBlock                ", startBlock);
         // POST-DEPLOY (manual, needs the ENS name owner wallet):
-        //   NameWrapper.setApprovalForAll(subnames, true)  -> lets the registrar mint subnames under the name
+        //   NameWrapper.setApprovalForAll(subnamesAddr, true)  -> lets the registrar mint subnames under the name
     }
 
     /**
