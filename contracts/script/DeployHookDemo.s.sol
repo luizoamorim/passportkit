@@ -6,12 +6,12 @@ import {Script, console} from "forge-std/Script.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {IPoolManager, ModifyLiquidityParams} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
-import {PoolModifyLiquidityTest} from "@uniswap/v4-core/src/test/PoolModifyLiquidityTest.sol";
+import {DemoPositionRouter} from "../src/demo/DemoPositionRouter.sol";
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
@@ -49,7 +49,7 @@ contract DeployHookDemo is Script {
     AccessGate gate;
     PoolManager poolManager;
     PoolSwapTest swapRouter;
-    PoolModifyLiquidityTest liquidityRouter;
+    DemoPositionRouter liquidityRouter;
     MockERC20 token0;
     MockERC20 token1;
     ComplianceHook dealHook;
@@ -105,7 +105,7 @@ contract DeployHookDemo is Script {
             ? PoolManager(existingPoolManager)
             : new PoolManager(operator);
         swapRouter = new PoolSwapTest(poolManager);
-        liquidityRouter = new PoolModifyLiquidityTest(poolManager);
+        liquidityRouter = new DemoPositionRouter(poolManager);
 
         MockERC20 tokenA = new MockERC20("Property Share", "PROP", 18);
         MockERC20 tokenB = new MockERC20("Mock USD", "mUSD", 18);
@@ -154,14 +154,7 @@ contract DeployHookDemo is Script {
         PoolKey memory key = _poolKey(hook);
         poolManager.initialize(key, 79228162514264337593543950336); // price 1:1
         liquidityRouter.modifyLiquidity(
-            key,
-            ModifyLiquidityParams({
-                tickLower: TickMath.minUsableTick(60),
-                tickUpper: TickMath.maxUsableTick(60),
-                liquidityDelta: 10_000e18,
-                salt: 0
-            }),
-            abi.encode(operator)
+            key, TickMath.minUsableTick(60), TickMath.maxUsableTick(60), 10_000e18, abi.encode(operator)
         );
     }
 

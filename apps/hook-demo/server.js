@@ -112,6 +112,7 @@ const SWAP_ROUTER_ABI = [
   },
 ];
 
+// DemoPositionRouter — positions are keyed by msg.sender, no salt parameter
 const LIQUIDITY_ROUTER_ABI = [
   {
     type: 'function',
@@ -119,16 +120,9 @@ const LIQUIDITY_ROUTER_ABI = [
     stateMutability: 'payable',
     inputs: [
       { ...POOL_KEY_ABI, name: 'key' },
-      {
-        type: 'tuple',
-        name: 'params',
-        components: [
-          { name: 'tickLower', type: 'int24' },
-          { name: 'tickUpper', type: 'int24' },
-          { name: 'liquidityDelta', type: 'int256' },
-          { name: 'salt', type: 'bytes32' },
-        ],
-      },
+      { name: 'tickLower', type: 'int24' },
+      { name: 'tickUpper', type: 'int24' },
+      { name: 'liquidityDelta', type: 'int256' },
       { name: 'hookData', type: 'bytes' },
     ],
     outputs: [{ type: 'int256' }],
@@ -301,7 +295,9 @@ function deployWorld() {
   const out = spawnSync(
     'forge',
     ['script', 'script/DeployHookDemo.s.sol', '--rpc-url', RPC_URL, '--broadcast'],
-    { cwd: CONTRACTS_DIR, encoding: 'utf8' },
+    // ENV includes .env-file settings (OPERATOR_PK, POOL_MANAGER, …) that the forge
+    // script reads via vm.envOr — process.env alone would silently drop them
+    { cwd: CONTRACTS_DIR, encoding: 'utf8', env: ENV },
   );
   if (out.status !== 0) throw new Error(`deploy failed:\n${out.stdout}\n${out.stderr}`);
 }
@@ -507,7 +503,9 @@ async function doLiquidity(actor, poolName, direction) {
   const delta = direction === 'remove' ? -LIQUIDITY_STEP : LIQUIDITY_STEP;
   const txHash = await write(actor, A.liquidityRouter, LIQUIDITY_ROUTER_ABI, 'modifyLiquidity', [
     pool.key,
-    { tickLower: -887220, tickUpper: 887220, liquidityDelta: delta, salt: pad(wallet, { size: 32 }) },
+    -887220,
+    887220,
+    delta,
     encodeAbiParameters([{ type: 'address' }], [wallet]),
   ]);
   const { positions } = aggregateLiquidity(await refreshLogs());
