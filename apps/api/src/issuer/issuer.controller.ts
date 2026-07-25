@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { keccak256, toHex, type Address, type Hex } from 'viem';
 import { randomBytes } from 'crypto';
 import { IssuerSigningService } from './issuer-signing.service';
+import { RevocationService } from './revocation.service';
 import { CLAIM_TOPICS, type ClaimTopicName } from './claim-topics';
 
 interface MockClaimDto {
@@ -9,6 +10,13 @@ interface MockClaimDto {
   topic: ClaimTopicName;
   approved?: boolean; // default true; false = evidence rejected, no claim issued
   expiresInDays?: number; // default 365; 0 = no expiry
+}
+
+interface RevokeDto {
+  wallet?: Address; // resolved to identity via IdentityFactory when identity omitted
+  identity?: Address;
+  topic: ClaimTopicName;
+  value?: boolean; // default true = latch revoked
 }
 
 /**
@@ -20,7 +28,10 @@ interface MockClaimDto {
  */
 @Controller('issuer')
 export class IssuerController {
-  constructor(private readonly signing: IssuerSigningService) {}
+  constructor(
+    private readonly signing: IssuerSigningService,
+    private readonly revocation: RevocationService,
+  ) {}
 
   @Get('signer')
   signer() {
@@ -59,5 +70,20 @@ export class IssuerController {
       signature: signed.signature,
       data: signed.data,
     };
+  }
+
+  /**
+   * The demo's "money moment": an AGENT (AGENT_ROLE) latches a claim revoked on-chain.
+   * While latched, EligibilityGate refuses everywhere and no fresh claim can land.
+   */
+  @Post('revoke')
+  async revoke(@Body() dto: RevokeDto) {
+    const value = dto.value ?? true;
+    return this.revocation.setRevoked({
+      wallet: dto.wallet,
+      identity: dto.identity,
+      topic: CLAIM_TOPICS[dto.topic],
+      value,
+    });
   }
 }
