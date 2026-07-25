@@ -89,7 +89,7 @@ contract DeployPassportKit is Script {
         // 4. Surfaces
         //    GatedERC20's "resolver" is the IdentityFactory (wallet -> identity); policy #1 (KYC).
         tokenAddr = address(new GatedERC20("PassportKit Demo", "PKD", address(gate), factoryAddr, 1, agentAddr));
-        PassportResolver resolver = new PassportResolver();
+        PassportResolver resolver = new PassportResolver(factoryAddr); // factory = ENSIP-25 agent registry
         resolverAddr = address(resolver);
         subnamesAddr = address(new PassportSubnameRegistrar(nameWrapper, address(resolver), agentAddr));
 

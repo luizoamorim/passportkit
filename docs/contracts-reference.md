@@ -250,7 +250,10 @@ A custom ENS resolver whose `text(node, key)` is **computed on the fly** from th
 |---|---|
 | `setTenant(parentNode, gate, policyId, controller)` | each tenant registers its config (TOFU: first caller wins) |
 | `setIdentity(node, parentNode, identity)` | binds a subname to an identity (only the tenant's controller) |
-| `text(node, key)` | ENS `ITextResolver`, computed live by the gate |
+| `text(node, key)` | ENS `ITextResolver`, computed live: `compliance.status` (from the gate) **and `agent-registration[<registry>][<agent>]` (ENSIP-25, from the IdentityFactory link)** |
+| `registry7930()` / `agentRegistrationKey(agent)` | ERC-7930 registry address + the exact ENSIP-25 key, so clients build the same key the resolver matches |
+
+**ENSIP-25 (Verifiable Agent Identity):** the resolver serves the `agent-registration[...]` record **live** — it returns `"1"` iff the agent wallet is linked to this name's identity in the `IdentityFactory` (constructor-injected). `linkAgent` makes the attestation appear, `unlinkAgent` removes it — no manual `setText`. Spec: [`specs/ensip-25-agent-identity.md`](./specs/ensip-25-agent-identity.md).
 
 **White-label:** a single resolver serves **N tenants** — each `parentNode` carries its own `(gate, policyId, controller)`.
 Since ENS calls `text(...)` via `eth_call`, the extra SLOADs **cost the user nothing**.

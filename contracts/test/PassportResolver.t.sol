@@ -19,23 +19,78 @@ contract MockGate {
     }
 }
 
+/// Minimal IdentityFactory mock: a settable wallet -> identity map (matches identityOfWallet).
+contract MockFactory {
+    mapping(address => address) public identityOfWallet;
+
+    function link(address wallet, address id) external {
+        identityOfWallet[wallet] = id;
+    }
+}
+
 contract PassportResolverTest is Test {
     PassportResolver resolver;
     MockGate gate;
+    MockFactory factory;
 
     address controller = address(0xC0FFEE);
     address identity = address(0xBEEF);
+    address agent = address(0xA6E17);
     uint256 policyId = 1;
 
     bytes32 parentNode = keccak256("brandx.eth");
     bytes32 node = keccak256("alice.brandx.eth");
 
     function setUp() public {
-        resolver = new PassportResolver();
+        factory = new MockFactory();
+        resolver = new PassportResolver(address(factory));
         gate = new MockGate();
         resolver.setTenant(parentNode, address(gate), policyId, controller);
         vm.prank(controller);
         resolver.setIdentity(node, parentNode, identity);
+    }
+
+    // --- ENSIP-25: agent-registration computed live ---
+
+    function test_agentRegistration_returns_1_when_linked() public {
+        factory.link(agent, identity); // linkAgent(agent -> alice's identity)
+        assertEq(resolver.text(node, resolver.agentRegistrationKey(agent)), "1");
+    }
+
+    function test_agentRegistration_empty_when_not_linked() public view {
+        assertEq(resolver.text(node, resolver.agentRegistrationKey(agent)), "");
+    }
+
+    function test_agentRegistration_empty_after_unlink() public {
+        factory.link(agent, identity);
+        assertEq(resolver.text(node, resolver.agentRegistrationKey(agent)), "1");
+        factory.link(agent, address(0)); // unlinkAgent
+        assertEq(resolver.text(node, resolver.agentRegistrationKey(agent)), "");
+    }
+
+    function test_agentRegistration_empty_when_linked_to_other_identity() public {
+        factory.link(agent, address(0xD00D)); // linked, but to a different person
+        assertEq(resolver.text(node, resolver.agentRegistrationKey(agent)), "");
+    }
+
+    function test_agentRegistration_empty_for_node_without_identity() public {
+        factory.link(agent, identity);
+        bytes32 unknown = keccak256("nobody.brandx.eth");
+        assertEq(resolver.text(unknown, resolver.agentRegistrationKey(agent)), "");
+    }
+
+    function test_agentRegistration_empty_wrong_registry() public {
+        factory.link(agent, identity);
+        // Same shape, but a bogus registry field -> must not match (prefix/length differ).
+        string memory bad =
+            "agent-registration[0xdeadbeef][0x00000000000000000000000000000000000a6e17]";
+        assertEq(resolver.text(node, bad), "");
+    }
+
+    function test_agentRegistration_empty_malformed_key() public {
+        factory.link(agent, identity);
+        assertEq(resolver.text(node, "agent-registration[]"), "");
+        assertEq(resolver.text(node, "agent-registration[x][y]"), "");
     }
 
     function test_status_green_when_eligible() public view {
