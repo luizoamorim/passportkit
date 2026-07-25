@@ -16,6 +16,8 @@ remappings = [
     "@uniswap/v4-periphery/=lib/uniswap-hooks/lib/v4-periphery/",
     "solmate/=lib/uniswap-hooks/lib/v4-core/lib/solmate/",
 ]
+# DeployPassportKit.s.sol writes deployments/<chainid>.json (addresses + startBlock for the subgraph/.env)
+fs_permissions = [{ access = "write", path = "./deployments" }]
 
 [profile.default.fuzz]
 runs = 256
