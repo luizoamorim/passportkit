@@ -30,8 +30,7 @@ contract Identity {
         uint256 topic;
         address issuer;     // the trusted issuer CONTRACT
         bytes   signature;  // issuer's EIP-712 signature
-        bytes   data;       // hash/reference — NEVER PII
-        uint64  expiresAt;  // 0 = no expiry
+        bytes   data;       // abi.encode(dataHash, expiresAt, nonce) — signed; NEVER PII
         bool    exists;
     }
     mapping(uint256 => mapping(address => Claim)) private _claim; // topic => issuer => claim
@@ -41,7 +40,7 @@ contract Identity {
     address public immutable issuerRegistry; // knows which issuers are trusted per topic
 
     event KeyAdded(bytes32 indexed key, uint256 indexed purpose);
-    event ClaimAdded(bytes32 indexed claimId, uint256 indexed topic, address indexed issuer, uint64 expiresAt);
+    event ClaimAdded(bytes32 indexed claimId, uint256 indexed topic, address indexed issuer);
     event ClaimRevoked(uint256 indexed topic, address indexed issuer);
 
     error NoClaimKey();
@@ -49,11 +48,13 @@ contract Identity {
     error BadSignature();
     error TopicCap();
     error NoClaimToRevoke();
+    error ZeroOwner();
+    error ZeroIssuerRegistry();
 
     /// @param ownerWallet the user — seeded as MANAGEMENT (and thus effectively CLAIM, see keyHasPurpose)
     constructor(address ownerWallet, address issuerRegistry_) {
-        require(ownerWallet != address(0), "zero owner");
-        require(issuerRegistry_ != address(0), "zero issuerRegistry");
+        if (ownerWallet == address(0)) revert ZeroOwner();
+        if (issuerRegistry_ == address(0)) revert ZeroIssuerRegistry();
         issuerRegistry = issuerRegistry_;
         _keyPurposes[keyForAddress(ownerWallet)].push(KeyPurpose.MANAGEMENT);
         emit KeyAdded(keyForAddress(ownerWallet), KeyPurpose.MANAGEMENT);
@@ -74,12 +75,14 @@ contract Identity {
 
     // --- ERC-735 write (Model B) ---
 
+    /// @dev Expiry & nonce live INSIDE the signed `data` (abi.encode(dataHash, expiresAt, nonce));
+    ///      the ClaimIssuer decodes and enforces them in isClaimValid — no separate param here,
+    ///      so a caller can't pass an expiry that diverges from what the issuer signed.
     function submitClaim(
         uint256 topic,
         address issuer,
         bytes calldata sig,
-        bytes calldata data,
-        uint64 expiresAt
+        bytes calldata data
     ) external returns (bytes32 claimId) {
         // (1) only the owner writes to their own identity
         if (!keyHasPurpose(keyForAddress(msg.sender), KeyPurpose.CLAIM)) revert NoClaimKey();
@@ -94,10 +97,10 @@ contract Identity {
             _countByTopic[topic] += 1;
         }
         c.topic = topic; c.issuer = issuer; c.signature = sig; c.data = data;
-        c.expiresAt = expiresAt; c.exists = true;
+        c.exists = true;
 
         claimId = keccak256(abi.encode(issuer, topic));
-        emit ClaimAdded(claimId, topic, issuer, expiresAt);
+        emit ClaimAdded(claimId, topic, issuer);
     }
 
     /// @notice Holder-side voluntary removal. NOT the compliance lever — platform revocation

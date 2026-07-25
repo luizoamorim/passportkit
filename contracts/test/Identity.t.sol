@@ -32,7 +32,6 @@ contract IdentityTest is Test {
     uint256 kyc; // claim topic, set in setUp from ClaimTopics
     bytes sig = hex"01";
     bytes data = hex"02";
-    uint64 exp = 0;
 
     function setUp() public {
         kyc = ClaimTopics.KYC_VERIFIED;
@@ -55,7 +54,7 @@ contract IdentityTest is Test {
 
     function test_submitClaim_by_owner_lands() public {
         vm.prank(owner);
-        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        id.submitClaim(kyc, address(issuer), sig, data);
         (bool exists, bytes memory s, bytes memory d) = id.getClaim(kyc, address(issuer));
         assertTrue(exists);
         assertEq(s, sig);
@@ -65,26 +64,26 @@ contract IdentityTest is Test {
     function test_submitClaim_nonOwner_reverts() public {
         vm.prank(stranger);
         vm.expectRevert(Identity.NoClaimKey.selector);
-        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        id.submitClaim(kyc, address(issuer), sig, data);
     }
 
     function test_submitClaim_untrustedIssuer_reverts() public {
         MockClaimIssuer rogue = new MockClaimIssuer(); // not trusted in the registry
         vm.prank(owner);
         vm.expectRevert(Identity.UntrustedIssuer.selector);
-        id.submitClaim(kyc, address(rogue), sig, data, exp);
+        id.submitClaim(kyc, address(rogue), sig, data);
     }
 
     function test_submitClaim_badSignature_reverts() public {
         issuer.setValid(false);
         vm.prank(owner);
         vm.expectRevert(Identity.BadSignature.selector);
-        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        id.submitClaim(kyc, address(issuer), sig, data);
     }
 
     function test_revokeClaim_holder_ok_and_hides_claim() public {
         vm.prank(owner);
-        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        id.submitClaim(kyc, address(issuer), sig, data);
         vm.prank(owner);
         id.revokeClaim(kyc, address(issuer));
         (bool exists,,) = id.getClaim(kyc, address(issuer));
@@ -93,7 +92,7 @@ contract IdentityTest is Test {
 
     function test_revokeClaim_stranger_reverts() public {
         vm.prank(owner);
-        id.submitClaim(kyc, address(issuer), sig, data, exp);
+        id.submitClaim(kyc, address(issuer), sig, data);
         vm.prank(stranger);
         vm.expectRevert(Identity.NoClaimKey.selector);
         id.revokeClaim(kyc, address(issuer));
@@ -103,8 +102,8 @@ contract IdentityTest is Test {
     /// cap slot (prevents accidental TopicCap lockout).
     function test_resubmit_same_pair_updates_in_place_no_cap_growth() public {
         vm.startPrank(owner);
-        id.submitClaim(kyc, address(issuer), sig, hex"aa", exp);
-        id.submitClaim(kyc, address(issuer), sig, hex"bb", exp); // re-submit same pair
+        id.submitClaim(kyc, address(issuer), sig, hex"aa");
+        id.submitClaim(kyc, address(issuer), sig, hex"bb"); // re-submit same pair
         vm.stopPrank();
         (bool exists,, bytes memory d) = id.getClaim(kyc, address(issuer));
         assertTrue(exists);
@@ -116,13 +115,13 @@ contract IdentityTest is Test {
             MockClaimIssuer mi = new MockClaimIssuer();
             reg.setTrusted(address(mi), kyc, true);
             vm.prank(owner);
-            id.submitClaim(kyc, address(mi), sig, data, exp);
+            id.submitClaim(kyc, address(mi), sig, data);
         }
         MockClaimIssuer extra = new MockClaimIssuer();
         reg.setTrusted(address(extra), kyc, true);
         vm.prank(owner);
         vm.expectRevert(Identity.TopicCap.selector);
-        id.submitClaim(kyc, address(extra), sig, data, exp);
+        id.submitClaim(kyc, address(extra), sig, data);
     }
 
     function test_revokeClaim_nonexistent_reverts() public {
@@ -140,19 +139,19 @@ contract IdentityTest is Test {
             reg.setTrusted(address(mi), kyc, true);
             if (i == 0) first = address(mi);
             vm.prank(owner);
-            id.submitClaim(kyc, address(mi), sig, data, exp);
+            id.submitClaim(kyc, address(mi), sig, data);
         }
         // at cap: a new issuer reverts
         MockClaimIssuer extra = new MockClaimIssuer();
         reg.setTrusted(address(extra), kyc, true);
         vm.prank(owner);
         vm.expectRevert(Identity.TopicCap.selector);
-        id.submitClaim(kyc, address(extra), sig, data, exp);
+        id.submitClaim(kyc, address(extra), sig, data);
         // revoke one → frees the slot → the new issuer now fits
         vm.prank(owner);
         id.revokeClaim(kyc, first);
         vm.prank(owner);
-        id.submitClaim(kyc, address(extra), sig, data, exp);
+        id.submitClaim(kyc, address(extra), sig, data);
         (bool exists,,) = id.getClaim(kyc, address(extra));
         assertTrue(exists);
     }
@@ -164,13 +163,13 @@ contract IdentityTest is Test {
             MockClaimIssuer mi = new MockClaimIssuer();
             reg.setTrusted(address(mi), kyc, true);
             vm.prank(owner);
-            id.submitClaim(kyc, address(mi), sig, data, exp);
+            id.submitClaim(kyc, address(mi), sig, data);
         }
         // one more trusted issuer over the cap → TopicCap
         MockClaimIssuer extra = new MockClaimIssuer();
         reg.setTrusted(address(extra), kyc, true);
         vm.prank(owner);
         vm.expectRevert(Identity.TopicCap.selector);
-        id.submitClaim(kyc, address(extra), sig, data, exp);
+        id.submitClaim(kyc, address(extra), sig, data);
     }
 }
