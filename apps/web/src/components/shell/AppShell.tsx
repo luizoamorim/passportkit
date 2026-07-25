@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
 import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
@@ -33,6 +33,10 @@ type WalletState = {
   provider: WalletKind;
   connect: (address: string, provider?: WalletKind) => void;
   disconnect: () => void;
+  /** The user disconnected on purpose — see `WalletConnectControl`. Shell-internal. */
+  disconnected: boolean;
+  /** Undo that, letting the injected connector adopt the account again. Shell-internal. */
+  resume: () => void;
 };
 
 const WalletContext = createContext<WalletState>({
@@ -40,6 +44,8 @@ const WalletContext = createContext<WalletState>({
   provider: 'privy',
   connect: () => {},
   disconnect: () => {},
+  disconnected: false,
+  resume: () => {},
 });
 
 /** The connected address, shared by every page under the shell. */
@@ -59,18 +65,35 @@ export function useWallet(): WalletState {
  * header. Both read and write the same address.
  */
 export function WalletConnectControl() {
-  const { address, provider, connect, disconnect } = useWallet();
+  const { address, provider, connect, disconnect, disconnected, resume } = useWallet();
 
   const onPrivy = useCallback((addr: string) => connect(addr, 'privy'), [connect]);
   const onMetaMask = useCallback((addr: string) => connect(addr, 'metamask'), [connect]);
 
   if (HAS_PRIVY) {
+    // Privy's own logout flips `authenticated`, so disconnect sticks by itself.
     return (
       <PrivyLoginButton
         onWalletReady={onPrivy}
         onDisconnect={disconnect}
         address={provider === 'privy' ? address : null}
       />
+    );
+  }
+
+  // Disconnecting does not un-authorize the site in MetaMask, and
+  // `ConnectWalletButton` adopts an authorized account in a mount effect. Left
+  // mounted it would read the account straight back out of `eth_accounts` and
+  // undo the disconnect — which is why this used to be papered over by
+  // redirecting to `/`. Keep it UNMOUNTED instead: mounting it is the reconnect.
+  if (disconnected) {
+    return (
+      <button
+        onClick={resume}
+        className="bg-[#0D1428] text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-[#141E38] transition-colors"
+      >
+        Connect Wallet
+      </button>
     );
   }
 
@@ -94,41 +117,32 @@ export function WalletConnectControl() {
 function useDemoWorld(): { world: DemoWorld | null; enabled: boolean | null } {
   const [world, setWorld] = useState<DemoWorld | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const enabledRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const stop = (isEnabled: boolean) => {
-      enabledRef.current = isEnabled;
-      setEnabled(isEnabled);
-      if (!isEnabled) setWorld(null);
-    };
-
     async function probe() {
-      let again = true;
       try {
         const res = await fetch('/api/demo/world', { cache: 'no-store' });
         if (cancelled) return;
         if (res.status === 403) {
-          stop(false);
-          return; // demo runtime is off — nothing to poll for
+          // The one terminal answer: this build has no demo runtime.
+          setEnabled(false);
+          setWorld(null);
+          return;
         }
-        enabledRef.current = true;
         setEnabled(true);
         // A 5xx means the runtime is on and the chain is unhappy; keep the last
         // good world on screen and try again rather than blanking the chip.
         if (res.ok) setWorld((await res.json()) as DemoWorld);
       } catch {
         if (cancelled) return;
-        // Never answered — treat as off unless a previous probe said otherwise.
-        if (enabledRef.current !== true) {
-          stop(false);
-          again = false;
-        }
+        // No answer at all — the dev server is restarting, or we are offline.
+        // That is NOT the 403 that means "no demo runtime", so do not latch the
+        // demo off over one blip: keep what we know and retry.
       }
-      if (!cancelled && again) timer = setTimeout(probe, WORLD_POLL_MS);
+      if (!cancelled) timer = setTimeout(probe, WORLD_POLL_MS);
     }
 
     probe();
@@ -144,20 +158,26 @@ function useDemoWorld(): { world: DemoWorld | null; enabled: boolean | null } {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [provider, setProvider] = useState<WalletKind>('privy');
+  const [disconnected, setDisconnected] = useState(false);
   const { world, enabled } = useDemoWorld();
 
   const connect = useCallback((addr: string, kind: WalletKind = 'privy') => {
     setAddress(addr);
     setProvider(kind);
+    setDisconnected(false);
   }, []);
 
   const disconnect = useCallback(() => {
     setAddress(null);
+    setProvider('privy');
+    setDisconnected(true);
   }, []);
 
+  const resume = useCallback(() => setDisconnected(false), []);
+
   const wallet = useMemo<WalletState>(
-    () => ({ address, provider, connect, disconnect }),
-    [address, provider, connect, disconnect],
+    () => ({ address, provider, connect, disconnect, disconnected, resume }),
+    [address, provider, connect, disconnect, disconnected, resume],
   );
 
   return (
