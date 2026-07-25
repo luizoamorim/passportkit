@@ -9,6 +9,12 @@ import { usePathname } from 'next/navigation';
  * `/markets` and `/concierge` are driven entirely by `/api/demo/*`, which is a
  * 403 unless `DEMO_MODE=true` — so they are hidden when the demo runtime is off
  * rather than linking to a page that can only report a 403.
+ *
+ * The landing page deliberately does the opposite and keeps all four steps
+ * linked: a nav lists what works right now, a story does not get to drop two of
+ * its four chapters. The pages themselves close that gap — see
+ * `components/demo/WorldEmptyState.tsx`, which explains the runtime is off and
+ * that `make demo` starts it.
  */
 
 type NavItem = { href: string; label: string; demoOnly?: boolean };

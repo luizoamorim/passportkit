@@ -29,6 +29,7 @@ import { StatusPill } from '@/components/demo/StatusPill';
 import { TicketFeed } from '@/components/demo/TicketFeed';
 import { TxInspector } from '@/components/demo/TxInspector';
 import { TxLog, type TxLogEntry, type TxLogTone } from '@/components/demo/TxLog';
+import { WorldEmptyState } from '@/components/demo/WorldEmptyState';
 import {
   useDemoWorld,
   type DemoAgent,
@@ -106,7 +107,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 // ---------------------------------------------------------------- page
 
 export default function ConciergePage() {
-  const { world, error, ready, refresh } = useDemoWorld();
+  const { world, error, ready, runtimeOff, refresh } = useDemoWorld();
   const [entries, setEntries] = useState<TxLogEntry[]>([]);
   const [busy, setBusy] = useState<string[]>([]);
   const [inspecting, setInspecting] = useState<string | null>(null);
@@ -337,13 +338,7 @@ export default function ConciergePage() {
           invoice); anything over the per-transaction cap goes to the owners&apos; approval queue.
         </p>
 
-        {!world && (
-          <div className="bg-white border border-[#DDE1EA] rounded-xl p-6">
-            <p className="text-sm text-[#4B5568]">
-              {error ?? (ready ? 'No demo world yet.' : 'Reading the demo world…')}
-            </p>
-          </div>
-        )}
+        {!world && <WorldEmptyState error={error} ready={ready} runtimeOff={runtimeOff} />}
 
         {world && (
           <>

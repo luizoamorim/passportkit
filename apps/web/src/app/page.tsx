@@ -164,7 +164,7 @@ export default function LandingPage() {
         {!world && (
           <p className="mt-4 text-xs text-[#9CA3AF]">
             {ready ? (error ?? 'No demo world yet.') : 'Reading the demo world…'} The four steps still link through —
-            the live numbers appear once the local demo runtime is up.
+            the live numbers appear once the local demo runtime is up (<span className="font-mono">make demo</span>).
           </p>
         )}
       </section>

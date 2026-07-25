@@ -115,6 +115,12 @@ export interface DemoWorldHandle {
   error: string | null;
   /** true once the first answer (good or bad) has landed */
   ready: boolean;
+  /**
+   * The build has no demo runtime at all (`DEMO_MODE` unset → 403), as opposed
+   * to a runtime that is up and merely unhappy. The two need different copy:
+   * one is fixed with `make demo`, the other with a look at the chain.
+   */
+  runtimeOff: boolean;
   refresh: () => Promise<void>;
 }
 
@@ -124,6 +130,7 @@ export function useDemoWorld(pollMs: number = DEFAULT_POLL_MS): DemoWorldHandle 
   const [world, setWorld] = useState<DemoWorldState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [runtimeOff, setRuntimeOff] = useState(false);
 
   /**
    * Latched by a 403: this build has no demo runtime, so polling it again can
@@ -139,6 +146,7 @@ export function useDemoWorld(pollMs: number = DEFAULT_POLL_MS): DemoWorldHandle 
       const res = await fetch('/api/demo/world', { cache: 'no-store' });
       if (res.status === 403) {
         off.current = true;
+        setRuntimeOff(true);
         setError('Demo runtime is off — start the server with DEMO_MODE=true.');
         setWorld(null);
         return;
@@ -175,5 +183,5 @@ export function useDemoWorld(pollMs: number = DEFAULT_POLL_MS): DemoWorldHandle 
     };
   }, [refresh, pollMs]);
 
-  return { world, error, ready, refresh };
+  return { world, error, ready, runtimeOff, refresh };
 }
