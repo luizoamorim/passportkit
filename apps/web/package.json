@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --test test/demo/"
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.30.0",

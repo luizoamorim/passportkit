@@ -23,6 +23,16 @@ An Identity is not only for a person. A person can spawn an **x402 agent** that 
 ## Contracts (`contracts/`, Foundry)
 `Types.sol` (shared vocab) · `Identity` · `IdentityFactory` · `ClaimIssuer` · `IssuerRegistry` · `EligibilityGate` · `GatedERC20` · `ens/PassportResolver` (tenant-aware read-through) · `ens/PassportSubnameRegistrar` · `ComplianceHook` (Uniswap v4).
 
+## Monorepo layout
+`contracts/` (Foundry) · `apps/web` (Next 14 App Router — the one demo site) · `apps/api` (NestJS) · `cre/` — npm workspaces are `apps/api`, `apps/web`, `cre`. `apps/hook-demo` and `apps/concierge` are the two standalone node demo servers being folded into `apps/web`; they are retired at the end of `docs/plans/unified-demo-plan.md`.
+
+## Demo runtime (`apps/web`, local anvil only)
+- **One world, one file:** `contracts/script/DeployAll.s.sol` deploys the whole stack — both ComplianceHook pools *and* the house treasury on one PoolManager — and writes `apps/web/demo-addresses.json` (gitignored). Resetting one surface no longer wipes the other's contracts.
+- `apps/web/src/lib/demo/` — the runtime lifted out of the two standalone `server.js` files. `decode.js` (refusal decoding), `positions.js` (pool logs → liquidity/price/positions), `deciders.js`, `evidence.js`, `x402.js` moved **unchanged**; `chain.ts` (viem clients, actor wallets, `addresses()`, `assertDemo()`, reset/timewarp), `abis.ts` and `tickets.ts` are new.
+- `apps/web/src/app/api/demo/**` — the route handlers. `GET /api/demo/world` is the single state read every demo page uses; `POST /api/demo/world` takes `{action:'reset'|'timewarp', days?}`.
+- **Gated on `DEMO_MODE=true`:** every handler calls `assertDemo()` first and returns 403 otherwise. The anvil actor private keys live only in `chain.ts` (server bundle) — never in a `NEXT_PUBLIC_*` var, and never imported from a client component.
+- Tests: `npm test --workspace=apps/web` runs `node --test test/demo/`. `src/lib/demo/` and `test/` each carry a one-line `package.json` (`{"type":"module"}`) so node loads the ESM libs directly without making the whole Next app ESM.
+
 ## Conventions
 - Solidity `^0.8.24` (solc 0.8.24), **Apache-2.0**, OpenZeppelin v5 (`@openzeppelin/contracts/...`), forge-std. **ASCII-only in string literals** (solc rejects unicode).
 - Run the contract tests with `forge test` (the legacy PassportCreds contracts + tests were removed).

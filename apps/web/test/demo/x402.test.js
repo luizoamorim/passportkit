@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
-import { createVendorServer } from '../vendor/server.js';
-import { settleInvoice } from '../lib/x402.js';
+// The x402 vendor is still the standalone concierge app's; Task 4 ports it to
+// apps/web/src/app/api/demo/vendor/invoice/route.ts and this import moves with it.
+import { createVendorServer } from '../../../concierge/vendor/server.js';
+import { settleInvoice } from '../../src/lib/demo/x402.js';
 
 const VENDOR_ADDRESS = '0x90F79bf6EB2c4f870365E785982E1f101E93b906'; // test vendor payout address
 const ATTACKER_ADDRESS = '0x14dC79964da2C08b23698B3D3cc7Ca32193d9955'; // some other wallet entirely

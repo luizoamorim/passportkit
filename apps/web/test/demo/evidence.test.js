@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { keccak256, toHex } from 'viem';
-import { canonicalEvidence, evidenceHash } from '../lib/evidence.js';
+import { canonicalEvidence, evidenceHash } from '../../src/lib/demo/evidence.js';
 
 const decision = {
   ticketId: 1,

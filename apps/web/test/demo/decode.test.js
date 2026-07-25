@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeErrorResult, stringToHex } from 'viem';
-import { decodeRefusal, WRAPPED_ERROR_ABI, NOT_AUTHORIZED_ABI, NOT_COMPLIANT_ABI } from '../lib/decode.js';
+import { decodeRefusal, WRAPPED_ERROR_ABI, NOT_AUTHORIZED_ABI, NOT_COMPLIANT_ABI } from '../../src/lib/demo/decode.js';
 
 const HOOK = '0x92dC477C694802993d99cd89AAFc3E44C7Df0880'; // MandateHook
 const WALLET = '0x90F79bf6EB2c4f870365E785982E1f101E93b906'; // concierge agent

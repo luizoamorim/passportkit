@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeDecider } from '../lib/deciders.js';
+import { makeDecider } from '../../src/lib/demo/deciders.js';
 
 const ctx = { perTxCap: 200n * 10n ** 18n, casaBudget: 500n * 10n ** 18n };
 const t = (amount, category = 'plumbing') =>
