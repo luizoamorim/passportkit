@@ -279,6 +279,21 @@ decision hash anchored on-chain.
 - Tests: `cd contracts && forge test --match-path 'test/agents/*'` (29) and `cd apps/concierge && npm test` (28)
 - Spec & design notes: [`docs/specs/agent-concierge-spec.md`](docs/specs/agent-concierge-spec.md)
 
+### The Graph: Subgraph + Compliance-Officer Agent
+
+A subgraph (`subgraph/`) indexes the whole PassportKit stack on Ethereum Sepolia —
+claim lifecycle, issuer revocation latches, agent links, policies, gated transfers,
+ENS subnames — and, on every claim/latch event, re-runs `EligibilityGate.isEligible`
+at index time so the *history* of the gate's answers (which no contract stores) is
+queryable. On top of it, a **compliance officer** in the concierge app answers
+questions over the **live** Graph gateway, citing the exact GraphQL query + rows
+behind every answer: claims expiring in N days, the blast radius of revoking an
+issuer (who loses which surface, agents included), and full per-wallet audit trails.
+
+- Demo page: `make concierge-demo` → http://localhost:4190/officer
+- Tests: `cd apps/concierge && npm test` (query builders + assembly on recorded fixtures)
+- Spec & design notes: [`docs/specs/graph-spec.md`](docs/specs/graph-spec.md)
+
 ---
 
 ## Repo Structure
@@ -288,6 +303,7 @@ apps/
   api/       — NestJS backend (Prisma + PostgreSQL)
   web/       — Next.js 14 frontend (TailwindCSS + Privy)
 contracts/   — Foundry smart contracts (Solidity)
+subgraph/    — The Graph subgraph (claim lifecycle + eligibility history)
 cre/         — Chainlink CRE workflow (TypeScript + viem)
 demo/        — Synthetic compliance documents + AI prompts
 docs/        — Architecture, AI usage, judges notes
