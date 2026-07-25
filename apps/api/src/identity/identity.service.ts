@@ -11,6 +11,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { anvil, sepolia, arbitrumSepolia } from 'viem/chains';
+import { DemoStateService } from '../demo/demo-state.service';
 
 export interface CreateIdentityResult {
   identity: Address; // the deployed ERC-734/735 Identity contract owned by `wallet`
@@ -54,7 +55,7 @@ export class IdentityService {
   private readonly publicClient;
   private readonly walletClient?;
 
-  constructor() {
+  constructor(private readonly demo: DemoStateService) {
     this.rpcUrl = process.env.RPC_URL ?? 'http://localhost:8545';
     const chainId = parseInt(process.env.CHAIN_ID ?? '11155111', 10);
     this.chain = resolveChain(chainId);
@@ -77,6 +78,12 @@ export class IdentityService {
   }
 
   async createIdentity(wallet: Address): Promise<CreateIdentityResult> {
+    if (this.demo.enabled) {
+      const existing = this.demo.identityFor(wallet);
+      const identity = this.demo.createIdentity(wallet);
+      return { identity, wallet, created: !existing, transactionHash: null };
+    }
+
     if (
       this.identityFactoryAddress === ('0x' as Address) ||
       this.identityFactoryAddress === zeroAddress
