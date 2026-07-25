@@ -15,7 +15,7 @@
  * CLIENT SAFE: this only ever speaks to `/api/demo/*`, never to `lib/demo/*`
  * (which holds the actor private keys and must stay in the server bundle).
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type DemoClaimStatus = 'UNVERIFIED' | 'VERIFIED' | 'REVOKED' | 'EXPIRED';
 
@@ -125,10 +125,20 @@ export function useDemoWorld(pollMs: number = DEFAULT_POLL_MS): DemoWorldHandle 
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
+  /**
+   * Latched by a 403: this build has no demo runtime, so polling it again can
+   * only produce the same 403 — every 6s, in every visitor's console, on the
+   * one page a non-demo deployment actually serves (`/`). Same terminal answer
+   * the shell's own probe stops on; a server started with `DEMO_MODE=true`
+   * needs a reload either way, since the shell latches too.
+   */
+  const off = useRef(false);
+
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/demo/world', { cache: 'no-store' });
       if (res.status === 403) {
+        off.current = true;
         setError('Demo runtime is off — start the server with DEMO_MODE=true.');
         setWorld(null);
         return;
@@ -155,7 +165,7 @@ export function useDemoWorld(pollMs: number = DEFAULT_POLL_MS): DemoWorldHandle 
 
     async function tick() {
       await refresh();
-      if (!cancelled) timer = setTimeout(tick, pollMs);
+      if (!cancelled && !off.current) timer = setTimeout(tick, pollMs);
     }
 
     tick();
