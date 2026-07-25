@@ -443,9 +443,14 @@ demo-stop:
 
 # ─── Block explorer for the demo chain ────────────────────────────────────────
 # Points at $(RPC_PORT), so it follows `make demo RPC_PORT=…` to whichever chain
-# the demo is actually on.
+# the demo is actually on. ERIGON_URL is fetched by the Otterscan frontend in
+# YOUR browser, not from inside the container — so it must be an address the
+# browser can resolve (127.0.0.1), never host.docker.internal.
+#
+# Set EXPLORER_URL=http://localhost:5100 when starting the demo to make every
+# tx hash in the app link here.
 
 demo-explorer:
 	@echo "Otterscan explorer for the demo chain on :$(RPC_PORT) → http://localhost:5100"
-	@docker run --rm -p 5100:80 --add-host=host.docker.internal:host-gateway \
-	  -e ERIGON_URL=http://host.docker.internal:$(RPC_PORT) otterscan/otterscan:latest
+	@docker run --rm -p 5100:80 \
+	  -e ERIGON_URL=http://127.0.0.1:$(RPC_PORT) otterscan/otterscan:latest
