@@ -9,15 +9,15 @@ type Props = {
 export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Props) {
   if (passportStatus === 'GREEN') {
     return (
-      <div className="bg-[#3DDBD9]/10 border border-[#3DDBD9]/30 rounded-2xl p-5">
+      <div className="h-full rounded-3xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="text-2xl">✅</span>
           <div>
-            <p className="font-bold text-[#0D1428] text-base">Access Granted</p>
-            <p className="text-sm text-[#4B5568] mt-0.5">Your Compliance Passport is GREEN.</p>
+            <p className="text-base font-bold text-emerald-950">Access granted</p>
+            <p className="mt-1 text-sm leading-6 text-emerald-800">Your compliance passport is verified and active.</p>
             <Link
               href="/deal-room"
-              className="inline-block mt-3 text-sm font-semibold px-4 py-2 rounded-lg bg-[#0D1428] text-white hover:bg-[#141E38] transition-colors"
+              className="mt-4 inline-block rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-800"
             >
               Enter Deal Room →
             </Link>
@@ -29,17 +29,17 @@ export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Prop
 
   if (passportStatus === 'LIMITED' && canAccessDealRoom) {
     return (
-      <div className="bg-[#4A9EFF]/10 border border-[#4A9EFF]/30 rounded-2xl p-5">
+      <div className="h-full rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="text-2xl">🔓</span>
           <div>
-            <p className="font-bold text-[#0D1428] text-base">Deal Room Unlocked</p>
-            <p className="text-sm text-[#4B5568] mt-0.5">
+            <p className="text-base font-bold text-amber-950">Limited access</p>
+            <p className="mt-1 text-sm leading-6 text-amber-900">
               Investor actions disabled until Accredited Investor badge is verified.
             </p>
             <Link
               href="/deal-room"
-              className="inline-block mt-3 text-sm font-semibold px-4 py-2 rounded-lg border border-[#4A9EFF] text-[#4A9EFF] hover:bg-blue-50 transition-colors"
+              className="mt-4 inline-block rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-bold text-amber-900 transition hover:bg-amber-100"
             >
               Enter Deal Room →
             </Link>
@@ -51,7 +51,7 @@ export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Prop
 
   if (passportStatus === 'RED' || passportStatus === 'REVOKED') {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
+      <div className="h-full rounded-3xl border border-red-200 bg-red-50 p-6 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="text-2xl">🚫</span>
           <div>
@@ -66,12 +66,12 @@ export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Prop
   }
 
   return (
-    <div className="bg-[#F8F9FC] border border-[#DDE1EA] rounded-2xl p-5">
+      <div className="h-full rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start gap-3">
         <span className="text-2xl">🔒</span>
         <div>
-          <p className="font-bold text-[#0D1428] text-base">Deal Room Locked</p>
-          <p className="text-sm text-[#4B5568] mt-0.5">
+          <p className="text-base font-bold text-[#0D1428]">Deal Room locked</p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
             Complete compliance verification to continue.
           </p>
         </div>

@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { IDKitRequestWidget, proofOfHuman, type IDKitResult, type RpContext } from '@worldcoin/idkit';
+import { IDKitRequestWidget, identityCheck, type IDKitResult, type RpContext } from '@worldcoin/idkit';
+import { motion, useReducedMotion } from 'motion/react';
 import { createWalletClient, custom, parseAbi, type Address } from 'viem';
 import { sepolia } from 'viem/chains';
 import { ClaimStatusBadge } from './ClaimStatusBadge';
-import { requestWorldId, verifyWorldId, type WorldRequest } from '@/modules/passport/world-id.service';
+import { requestIdentityCheck, verifyIdentityCheck, type WorldRequest } from '@/modules/passport/world-id.service';
 
 type Status = 'idle' | 'preparing' | 'verifying' | 'verified' | 'error';
 
@@ -22,6 +23,7 @@ type Props = {
 };
 
 export function WorldIdPersonhoodCard({ wallet, identity, status: initialStatus, mode, onComplete }: Props) {
+  const reduceMotion = useReducedMotion();
   const [status, setStatus] = useState<Status>(initialStatus === 'VERIFIED' ? 'verified' : 'idle');
   const [request, setRequest] = useState<WorldRequest | null>(null);
   const [open, setOpen] = useState(false);
@@ -31,7 +33,7 @@ export function WorldIdPersonhoodCard({ wallet, identity, status: initialStatus,
     if (!identity) { setStatus('error'); setMessage('Your identity is still being created. Please try again.'); return; }
     setStatus('preparing'); setMessage(null);
     try {
-      const next = await requestWorldId();
+      const next = await requestIdentityCheck();
       setRequest(next); setOpen(true);
     } catch (error) {
       setStatus('error'); setMessage(error instanceof Error ? error.message : 'Could not prepare World ID.');
@@ -52,32 +54,39 @@ export function WorldIdPersonhoodCard({ wallet, identity, status: initialStatus,
 
   const handleVerify = async (result: IDKitResult) => {
     setStatus('verifying');
-    const verified = await verifyWorldId(wallet, identity!, result as unknown as Record<string, unknown>);
+    const verified = await verifyIdentityCheck(wallet, identity!, result as unknown as Record<string, unknown>);
     if (verified.mode === 'onchain') {
       const hash = await submitClaim(verified.claim);
-      setStatus('verified'); setMessage('World ID verified. Your wallet submitted the PROOF_OF_PERSONHOOD claim.');
-      await onComplete('Claim submitted from your wallet.', hash);
+      setStatus('verified'); setMessage('Identity Check verified. Your wallet submitted the KYC_VERIFIED claim.');
+      await onComplete('Identity Check claim submitted from your wallet.', hash);
     } else {
       setStatus('verified'); setMessage(verified.message);
       await onComplete(verified.message);
     }
   };
 
-  const label = status === 'preparing' ? 'Preparing World ID…' : status === 'verifying' ? 'Verifying proof…' : initialStatus === 'VERIFIED' || status === 'verified' ? 'Personhood verified' : 'Verify with World ID';
+  const label = status === 'preparing' ? 'Preparing Identity Check…' : status === 'verifying' ? 'Verifying identity…' : initialStatus === 'VERIFIED' || status === 'verified' ? 'Identity Check verified' : 'Verify identity';
 
   return (
-    <div className="bg-white border border-[#DDE1EA] rounded-2xl p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div><p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF]">Personhood</p><h2 className="font-bold text-[#0D1428]">World ID</h2></div>
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.38, ease: 'easeOut' }}
+      whileHover={reduceMotion ? undefined : { y: -2 }}
+      className="h-full rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7"
+    >
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div><div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg text-blue-700">◉</div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-600">Beta credential</p><h2 className="mt-1 text-xl font-bold tracking-tight text-[#0D1428]">Identity Check</h2></div>
         <ClaimStatusBadge status={(initialStatus === 'VERIFIED' || status === 'verified') ? 'VERIFIED' : status === 'error' ? 'FAILED' : status === 'verifying' ? 'PROCESSING' : 'UNVERIFIED'} />
       </div>
-      <p className="text-sm text-[#4B5568] mb-4">Prove you are a unique person with World ID. Only a hashed proof reference is included in the PassportKit claim.</p>
-      {mode === 'mock' && <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-3">MOCK mode: a verified proof updates local demo state only; it does not write onchain.</p>}
-      {message && <p role={status === 'error' ? 'alert' : 'status'} className={`text-xs mb-3 ${status === 'error' ? 'text-red-600' : 'text-[#4B5568]'}`}>{message}</p>}
-      <button onClick={start} disabled={status === 'preparing' || status === 'verifying' || status === 'verified'} className="w-full bg-[#0D1428] text-white text-sm font-semibold px-4 py-2.5 rounded-lg disabled:opacity-50">
+      <p className="text-sm leading-6 text-slate-600">Verify document-backed identity attributes and eligibility. Only a hashed verification reference is included in your PassportKit claim.</p>
+      <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600"><span className="font-bold text-slate-700">Document may be required.</span> A successful verification maps only to KYC_VERIFIED.</p>
+      {mode === 'mock' && <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800"><span className="font-bold">Demo mode.</span> A verified proof updates local status only; it does not write onchain.</p>}
+      {message && <p role={status === 'error' ? 'alert' : 'status'} className={`mt-5 rounded-xl px-3 py-2.5 text-xs leading-5 ${status === 'error' ? 'border border-red-200 bg-red-50 text-red-700' : 'bg-slate-50 text-slate-600'}`}>{message}</p>}
+      <motion.button whileHover={status === 'preparing' || status === 'verifying' || status === 'verified' || reduceMotion ? undefined : { scale: 1.01 }} whileTap={status === 'preparing' || status === 'verifying' || status === 'verified' || reduceMotion ? undefined : { scale: 0.99 }} onClick={start} disabled={status === 'preparing' || status === 'verifying' || status === 'verified'} className="mt-6 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none">
         {label}
-      </button>
-      {request && <IDKitRequestWidget open={open} onOpenChange={setOpen} app_id={request.app_id} action={request.action} rp_context={request.rp_context as RpContext} environment="staging" preset={proofOfHuman({ signal: wallet.toLowerCase() })} allow_legacy_proofs={true} handleVerify={handleVerify} onSuccess={() => setOpen(false)} onError={(code) => { setStatus('error'); setMessage(code === 'user_rejected' ? 'World ID verification was cancelled.' : 'World ID could not complete verification.'); }} />}
-    </div>
+      </motion.button>
+      {request && <IDKitRequestWidget open={open} onOpenChange={setOpen} app_id={request.app_id} action={request.action} rp_context={request.rp_context as RpContext} environment="staging" preset={identityCheck({ attributes: [{ type: 'document_type', value: 'passport' }, { type: 'minimum_age', value: 18 }] })} allow_legacy_proofs={false} handleVerify={handleVerify} onSuccess={() => setOpen(false)} onError={(code) => { setStatus('error'); setMessage(code === 'user_rejected' ? 'Identity Check was cancelled.' : 'Identity Check could not complete verification.'); }} />}
+    </motion.div>
   );
 }

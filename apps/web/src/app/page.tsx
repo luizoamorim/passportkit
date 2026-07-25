@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PRODUCT_NAME, TENANT_NAME, RESOURCE_NAME } from '@/modules/passport/passport.constants';
+import { LandingAuth } from '@/components/wallet/LandingAuth';
 
 const FEATURES = [
   {
@@ -48,12 +49,12 @@ export default function LandingPage() {
               <span className="hidden sm:inline text-xs text-[#9CA3AF] ml-2">powered by Node · Chainlink · Privy</span>
             </div>
           </div>
-          <Link
-            href="/passport"
+          <a
+            href="#access"
             className="text-sm font-semibold text-[#4A9EFF] hover:text-[#2B7FE0] transition-colors"
           >
             Launch App →
-          </Link>
+          </a>
         </div>
       </nav>
 
@@ -86,6 +87,8 @@ export default function LandingPage() {
             ⛓️ Base Sepolia
           </span>
         </div>
+        <div id="access"><LandingAuth /></div>
+        {/*
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             href="/passport"
@@ -99,7 +102,7 @@ export default function LandingPage() {
           >
             View Deal Room
           </Link>
-        </div>
+        </div>*/}
         <p className="text-xs text-[#9CA3AF] mt-4">
           Demo use case: {TENANT_NAME} · {RESOURCE_NAME}
         </p>

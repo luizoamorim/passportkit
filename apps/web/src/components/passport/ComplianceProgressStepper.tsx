@@ -1,4 +1,5 @@
 import type { PassportStatus, ClaimStatus } from '@/modules/passport/passport.types';
+import { motion, useReducedMotion } from 'motion/react';
 
 type StepStatus = 'NOT_STARTED' | 'PROCESSING' | 'PASSED' | 'FAILED' | 'LIMITED';
 
@@ -60,6 +61,7 @@ type Props = {
   kycStatus?: ClaimStatus;
   accreditedStatus?: ClaimStatus;
   personhood?: boolean;
+  personhoodStatus?: ClaimStatus;
 };
 
 export function ComplianceProgressStepper({
@@ -68,7 +70,9 @@ export function ComplianceProgressStepper({
   kycStatus,
   accreditedStatus,
   personhood = false,
+  personhoodStatus,
 }: Props) {
+  const reduceMotion = useReducedMotion();
   const passportStepStatus = (): StepStatus => {
     if (passportStatus === 'GREEN') return 'PASSED';
     if (passportStatus === 'LIMITED') return 'LIMITED';
@@ -83,9 +87,10 @@ export function ComplianceProgressStepper({
     return 'NOT_STARTED';
   };
 
-  const steps: Step[] = personhood ? [
+  const steps: Step[] = personhood || personhoodStatus ? [
     { label: 'Wallet Connected', status: walletConnected ? 'PASSED' : 'NOT_STARTED' },
-    { label: 'World ID Personhood', status: getStepStatus(kycStatus) },
+    { label: 'Selfie Personhood', status: getStepStatus(personhoodStatus ?? kycStatus) },
+    { label: 'Identity KYC', status: getStepStatus(kycStatus) },
     { label: 'Passport Claim', status: passportStepStatus() },
     { label: 'Deal Room Access', status: dealRoomStatus() },
   ] : [
@@ -124,13 +129,23 @@ export function ComplianceProgressStepper({
             <div key={step.label} className="flex-1 flex flex-col items-center">
               <div className="flex items-center w-full">
                 <div className="flex-1" />
-                <div
+                <motion.div
+                  initial={false}
+                  animate={{ scale: reduceMotion ? 1 : step.status === 'PASSED' ? [0.88, 1.12, 1] : 1 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.32 }}
                   className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold text-white z-10 ${styles.dot}`}
                 >
                   {STATUS_ICON[step.status]}
-                </div>
+                </motion.div>
                 {!isLast && (
-                  <div className={`flex-1 h-0.5 ${styles.connector}`} />
+                  <div className="flex-1 h-0.5 bg-slate-200 overflow-hidden">
+                    <motion.div
+                      className={`h-full ${styles.connector}`}
+                      initial={false}
+                      animate={{ width: step.status === 'PASSED' ? '100%' : '0%' }}
+                      transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease: 'easeOut' }}
+                    />
+                  </div>
                 )}
                 {isLast && <div className="flex-1" />}
               </div>

@@ -3,20 +3,20 @@ import { RESOURCE_NAME } from '@/modules/passport/passport.constants';
 
 export function DealRoomLocked() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-6">
-      <div className="w-20 h-20 rounded-full bg-[#1E2D4D] flex items-center justify-center mb-6 text-4xl">
+    <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-slate-800 bg-[#101A2E] px-6 text-center shadow-2xl shadow-black/10">
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 text-3xl">
         🔒
       </div>
       <h2 className="text-2xl font-bold text-white mb-2">{RESOURCE_NAME}</h2>
-      <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-4">
+      <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-400">
         Access Required
       </p>
-      <p className="text-[#8FA0C0] max-w-sm mb-6">
+      <p className="mb-6 max-w-sm text-sm leading-6 text-slate-400">
         This Deal Room requires a valid Compliance Passport. Complete verification to continue.
       </p>
       <Link
         href="/passport"
-        className="bg-[#4A9EFF] text-white text-sm font-semibold px-6 py-3 rounded-lg hover:bg-[#2B7FE0] transition-colors"
+        className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-900/30 transition hover:bg-blue-500"
       >
         Start Compliance Flow →
       </Link>

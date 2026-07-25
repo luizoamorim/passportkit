@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { metamaskAdapter } from '@/modules/wallet/metamask.adapter';
 import { shortenAddress } from '@/lib/format';
+import { markAppAuthenticated, shouldRestoreWallet } from '@/modules/wallet/app-session';
 
 type Props = {
   onConnect: (address: string) => void;
@@ -15,6 +16,7 @@ export function ConnectWalletButton({ onConnect, onDisconnect, address }: Props)
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!shouldRestoreWallet()) return;
     metamaskAdapter.getConnectedWallet().then((addr) => {
       if (addr) onConnect(addr);
     });
@@ -38,6 +40,7 @@ export function ConnectWalletButton({ onConnect, onDisconnect, address }: Props)
     setError(null);
     try {
       const addr = await metamaskAdapter.connectWallet();
+      markAppAuthenticated();
       onConnect(addr);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to connect wallet.');

@@ -3,20 +3,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
 import { PrivyLoginButton } from '@/components/wallet/PrivyLoginButton';
 import { DealRoomLocked } from '@/components/deal-room/DealRoomLocked';
 import { DealRoomLimited } from '@/components/deal-room/DealRoomLimited';
 import { DealRoomUnlocked } from '@/components/deal-room/DealRoomUnlocked';
 import { DealRoomBlocked } from '@/components/deal-room/DealRoomBlocked';
-import { getPassportState } from '@/modules/passport/passport.service';
+import { getEligibility } from '@/modules/passport/world-id.service';
 import type { PassportState } from '@/modules/passport/passport.types';
 import { PRODUCT_NAME } from '@/modules/passport/passport.constants';
 import { shortenAddress } from '@/lib/format';
+import { clearAppSession } from '@/modules/wallet/app-session';
 
 const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
 export default function DealRoomPage() {
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletProvider, setWalletProvider] = useState<'privy' | 'metamask'>('privy');
@@ -26,8 +29,22 @@ export default function DealRoomPage() {
   const fetchPassport = useCallback(async (addr: string) => {
     setLoading(true);
     try {
-      const state = await getPassportState(addr);
-      setPassport(state);
+      const eligibility = await getEligibility(addr);
+      const kycVerified = eligibility.kyc.status === 'VERIFIED';
+      const personhoodVerified = eligibility.personhood.status === 'VERIFIED';
+      setPassport({
+        walletAddress: addr,
+        status: kycVerified && personhoodVerified ? 'GREEN' : kycVerified || personhoodVerified ? 'LIMITED' : 'NONE',
+        claims: [
+          { claimType: 'KYC_AML_VERIFIED', status: kycVerified ? 'VERIFIED' : 'UNVERIFIED', approved: kycVerified },
+          { claimType: 'ACCREDITED_INVESTOR', status: 'UNVERIFIED', approved: false },
+        ],
+        badges: [],
+        transactions: [],
+        canAccessDealRoom: eligibility.dealRoom.eligible,
+        canAccessInvestorArea: eligibility.investor.eligible,
+        canInvest: eligibility.investor.eligible,
+      });
     } catch {
       setPassport(null);
     } finally {
@@ -54,6 +71,7 @@ export default function DealRoomPage() {
   );
 
   function handleDisconnect() {
+    clearAppSession();
     setWalletAddress(null);
     setPassport(null);
     router.push('/');
@@ -113,18 +131,32 @@ export default function DealRoomPage() {
     return <DealRoomLocked />;
   }
 
+  const dealRoomState = !walletAddress
+    ? 'login'
+    : loading
+      ? 'loading'
+      : !passport || passport.status === 'NONE'
+        ? 'locked'
+        : passport.status === 'RED' || passport.status === 'REVOKED'
+          ? 'blocked'
+          : passport.canAccessDealRoom && passport.status === 'GREEN'
+            ? 'unlocked'
+            : passport.canAccessDealRoom && passport.status === 'LIMITED'
+              ? 'limited'
+              : 'locked';
+
   return (
-    <div className="min-h-screen bg-[#0D1428]">
+    <div className="min-h-screen bg-[#0B1220]">
       {/* Header */}
-      <header className="border-b border-[#1E2D4D]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-30 border-b border-slate-700/70 bg-[#0B1220]/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4A9EFF] to-[#3DDBD9] flex items-center justify-center">
-              <span className="text-white text-xs font-bold">PC</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-xs font-bold text-white shadow-lg shadow-blue-950/30">
+              <span>PK</span>
             </div>
-            <span className="font-bold text-white text-sm">{PRODUCT_NAME}</span>
+            <span><span className="block text-sm font-bold text-white">{PRODUCT_NAME}</span><span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Secure deal room</span></span>
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {walletAddress && (
               <span className="text-xs font-mono text-[#8FA0C0]">{shortenAddress(walletAddress)}</span>
             )}
@@ -135,7 +167,7 @@ export default function DealRoomPage() {
             )}
             <Link
               href="/passport"
-              className="text-sm font-semibold text-[#4A9EFF] hover:text-[#2B7FE0] transition-colors"
+              className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 transition hover:border-blue-400 hover:text-white"
             >
               ← Passport
             </Link>
@@ -145,15 +177,15 @@ export default function DealRoomPage() {
 
       {/* Passport status bar */}
       {passport && walletAddress && (
-        <div className="border-b border-[#1E2D4D] bg-[#141E38]">
-          <div className="max-w-6xl mx-auto px-6 py-2 flex items-center gap-4">
-            <span className="text-[10px] font-semibold tracking-widest uppercase text-[#8FA0C0]">
+        <div className="border-b border-slate-800 bg-[#101A2E]">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+            <span className="text-[10px] font-bold tracking-[0.16em] uppercase text-slate-400">
               Passport Status
             </span>
             <span
               className={`text-xs font-bold ${
                 passport.status === 'GREEN'
-                  ? 'text-[#3DDBD9]'
+                  ? 'text-emerald-400'
                   : passport.status === 'LIMITED'
                   ? 'text-[#4A9EFF]'
                   : passport.status === 'RED'
@@ -163,12 +195,12 @@ export default function DealRoomPage() {
             >
               {passport.status}
             </span>
-            <span className="text-[#1E2D4D]">·</span>
-            <span className="text-[10px] text-[#8FA0C0]">
+            <span className="hidden text-slate-600 sm:inline">·</span>
+            <span className="text-[10px] text-slate-400">
               KYC/AML: {passport.claims.find((c) => c.claimType === 'KYC_AML_VERIFIED')?.status ?? 'UNVERIFIED'}
             </span>
-            <span className="text-[#1E2D4D]">·</span>
-            <span className="text-[10px] text-[#8FA0C0]">
+            <span className="hidden text-slate-600 sm:inline">·</span>
+            <span className="text-[10px] text-slate-400">
               Accredited: {passport.claims.find((c) => c.claimType === 'ACCREDITED_INVESTOR')?.status ?? 'UNVERIFIED'}
             </span>
           </div>
@@ -176,7 +208,14 @@ export default function DealRoomPage() {
       )}
 
       {/* Main content */}
-      <main className="max-w-3xl mx-auto px-6 py-12">{renderDealRoom()}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+        <motion.div initial={reduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.38, ease: 'easeOut' }} className="mb-8 max-w-2xl"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-400">Restricted workspace</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">Investment documents, protected by eligibility.</h1><p className="mt-3 text-sm leading-6 text-slate-400">Access is evaluated from the current compliance passport before any deal materials are revealed.</p></motion.div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={dealRoomState} initial={reduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ duration: 0.32, ease: 'easeOut' }}>
+            {renderDealRoom()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
     </div>
   );
 }

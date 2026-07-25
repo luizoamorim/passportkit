@@ -14,6 +14,7 @@
     "@swc/core": "^1.15.46",
     "@tanstack/react-query": "^5.101.0",
     "@worldcoin/idkit": "^4.2.1",
+    "motion": "^12.42.2",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",

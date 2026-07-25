@@ -1,8 +1,9 @@
 'use client';
 
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { setupPrivyWallet } from '@/modules/wallet/wallet.service';
+import { clearAppSession, markAppAuthenticated } from '@/modules/wallet/app-session';
 
 type Props = {
   onWalletReady: (address: string) => void;
@@ -13,16 +14,19 @@ type Props = {
 export function PrivyLoginButton({ onWalletReady, onDisconnect, address }: Props) {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleSetup = useCallback(async () => {
-    const embedded = wallets.find((w) => w.walletClientType === 'privy');
-    if (!embedded || !user) return;
+    const activeWallet = wallets.find((w) => w.walletClientType === 'privy') ?? wallets[0];
+    if (!activeWallet || !user) return;
     try {
-      await setupPrivyWallet(user.id, embedded.address);
-      onWalletReady(embedded.address);
+      await setupPrivyWallet(user.id, activeWallet.address);
+      markAppAuthenticated();
+      onWalletReady(activeWallet.address);
     } catch {
       // If backend setup fails, still allow demo with the address
-      onWalletReady(embedded.address);
+      markAppAuthenticated();
+      onWalletReady(activeWallet.address);
     }
   }, [wallets, user, onWalletReady]);
 
@@ -58,10 +62,21 @@ export function PrivyLoginButton({ onWalletReady, onDisconnect, address }: Props
           </span>
         </div>
         <button
-          onClick={() => { logout(); onDisconnect?.(); }}
+          onClick={async () => {
+            setLoggingOut(true);
+            try {
+              await Promise.allSettled(wallets.map((wallet) => Promise.resolve(wallet.disconnect())));
+              await logout();
+            } finally {
+              clearAppSession();
+              onDisconnect?.();
+              setLoggingOut(false);
+            }
+          }}
+          disabled={loggingOut}
           className="text-xs text-[#9CA3AF] hover:text-[#4B5568] transition-colors"
         >
-          Logout
+          {loggingOut ? 'Logging out…' : 'Logout'}
         </button>
       </div>
     );

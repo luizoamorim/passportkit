@@ -11,6 +11,7 @@ export type DemoPersonhoodStatus = 'UNVERIFIED' | 'VERIFIED';
 export class DemoStateService {
   private readonly identities = new Map<string, Address>();
   private readonly personhood = new Map<string, DemoPersonhoodStatus>();
+  private readonly kyc = new Map<string, DemoPersonhoodStatus>();
 
   get enabled(): boolean {
     return process.env.DEMO_MODE === 'true';
@@ -38,5 +39,13 @@ export class DemoStateService {
 
   markPersonhoodVerified(wallet: Address): void {
     this.personhood.set(wallet.toLowerCase(), 'VERIFIED');
+  }
+
+  kycFor(wallet: Address): DemoPersonhoodStatus {
+    return this.kyc.get(wallet.toLowerCase()) ?? 'UNVERIFIED';
+  }
+
+  markKycVerified(wallet: Address): void {
+    this.kyc.set(wallet.toLowerCase(), 'VERIFIED');
   }
 }

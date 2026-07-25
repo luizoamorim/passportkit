@@ -17,7 +17,7 @@ export function PrivyAppProvider({ children }: { children: React.ReactNode }) {
         embeddedWallets: {
           ethereum: { createOnLogin: 'users-without-wallets' },
         },
-        loginMethods: ['email'],
+        loginMethods: ['email', 'wallet'],
         appearance: {
           theme: 'light',
           accentColor: '#4A9EFF',

@@ -29,10 +29,10 @@ const STATUS_CONFIG: Record<
     copy: 'Compliance Passport issued with limited access. KYC / AML is verified, but Accredited Investor verification is missing.',
   },
   GREEN: {
-    border: 'border-[#3DDBD9]/40',
-    glow: 'shadow-[#3DDBD9]/20',
+    border: 'border-emerald-200',
+    glow: 'shadow-emerald-100',
     label: 'Full Access',
-    labelColor: 'text-[#3DDBD9]',
+    labelColor: 'text-emerald-700',
     copy: 'Compliance Passport GREEN. All required badges are verified.',
   },
   RED: {
@@ -71,33 +71,33 @@ export function PassportCard({ walletAddress, status, badges, passportTokenId, p
 
   return (
     <div
-      className={`bg-white border-2 rounded-2xl p-6 shadow-lg ${cfg.border} ${cfg.glow}`}
+      className={`h-full rounded-3xl border bg-white p-6 shadow-sm sm:p-7 ${cfg.border} ${cfg.glow}`}
     >
       <div className="flex items-start justify-between mb-4">
         <div>
-          <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-1">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-600">
             {PRODUCT_NAME}
           </p>
-          <h2 className="text-xl font-bold text-[#0D1428]">
+          <h2 className="text-xl font-bold tracking-tight text-[#0D1428]">
             Compliance{' '}
             <span className="bg-gradient-to-r from-[#4A9EFF] to-[#3DDBD9] bg-clip-text text-transparent">
               Passport
             </span>
           </h2>
         </div>
-        <div className={`text-sm font-bold px-3 py-1 rounded-full bg-current/10 ${cfg.labelColor}`}>
+        <div className={`rounded-full border border-current/10 bg-current/10 px-3 py-1 text-xs font-bold ${cfg.labelColor}`}>
           <span className={cfg.labelColor}>{cfg.label}</span>
         </div>
       </div>
 
-      <div className="mb-4">
-        <p className="text-[11px] font-semibold tracking-widest uppercase text-[#9CA3AF] mb-1">
+      <div className="mb-5 rounded-2xl bg-slate-50 px-4 py-3">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
           Wallet
         </p>
-        <p className="font-mono text-sm text-[#4B5568]">{shortenAddress(walletAddress)}</p>
+        <p className="font-mono text-sm font-medium text-slate-700">{shortenAddress(walletAddress)}</p>
       </div>
 
-      <p className="text-sm text-[#4B5568] mb-4">{cfg.copy}</p>
+      <p className="mb-5 text-sm leading-6 text-slate-600">{cfg.copy}</p>
 
       {badges.length > 0 && (
         <div className="mb-4">
@@ -105,8 +105,8 @@ export function PassportCard({ walletAddress, status, badges, passportTokenId, p
             Badges
           </p>
           <div className="flex flex-wrap gap-2">
-            {badges.map((badge) => (
-              <div key={badge.claimType} className="flex items-center gap-1.5">
+            {badges.map((badge, index) => (
+              <div key={`${badge.claimType}-${badge.label}-${index}`} className="flex items-center gap-1.5">
                 <span className="text-xs text-[#4B5568] font-medium">{badge.label}</span>
                 <ClaimStatusBadge status={badge.status} size="sm" />
               </div>

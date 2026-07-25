@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { IsEthereumAddress, IsObject, IsOptional } from 'class-validator';
 import { type Address } from 'viem';
 import { WorldIdService } from './world-id.service';
@@ -28,8 +28,31 @@ export class WorldIdController {
     return this.worldId.createRequest();
   }
 
+  @Post('identity/request')
+  createIdentityRequest() {
+    return this.worldId.createIdentityRequest();
+  }
+
+  /** Separate Selfie Check Beta request; it does not change Identity Check. */
+  @Post('selfie/request')
+  createSelfieRequest() {
+    return this.worldId.createSelfieRequest();
+  }
+
   @Post('verify')
   verify(@Body() dto: VerifyWorldIdDto) {
     return this.worldId.verifyAndPrepareClaim(dto.wallet, dto.identity, dto.idkitResponse);
+  }
+
+  @Post('identity/verify')
+  @HttpCode(HttpStatus.OK)
+  verifyIdentity(@Body() dto: VerifyWorldIdDto) {
+    return this.worldId.verifyIdentityAndPrepareClaim(dto.wallet, dto.identity, dto.idkitResponse);
+  }
+
+  @Post('selfie/verify')
+  @HttpCode(HttpStatus.OK)
+  verifySelfie(@Body() dto: VerifyWorldIdDto) {
+    return this.worldId.verifySelfieAndPrepareClaim(dto.wallet, dto.identity, dto.idkitResponse);
   }
 }

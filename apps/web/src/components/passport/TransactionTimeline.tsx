@@ -6,13 +6,13 @@ const EXPLORER_BASE =
 
 const CONTRACT_COLORS: Record<string, string> = {
   ClaimRegistry: 'text-[#4A9EFF] bg-[#4A9EFF]/10',
-  CompliancePassport: 'text-[#3DDBD9] bg-[#3DDBD9]/10',
+  CompliancePassport: 'text-emerald-300 bg-emerald-400/10',
   AccessGate: 'text-purple-500 bg-purple-50',
 };
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'text-blue-500',
-  CONFIRMED: 'text-[#3DDBD9]',
+  CONFIRMED: 'text-emerald-300',
   SIMULATED: 'text-[#4A9EFF]',
   FAILED: 'text-red-500',
 };
@@ -24,18 +24,18 @@ type Props = {
 export function TransactionTimeline({ transactions }: Props) {
   if (transactions.length === 0) {
     return (
-      <div className="bg-[#0D1428] rounded-2xl p-6">
-        <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-4">
+      <div className="rounded-3xl bg-[#0D1428] p-6 shadow-xl shadow-slate-900/10">
+        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">
           Transaction Timeline
         </p>
-        <p className="text-sm text-[#8FA0C0]">No onchain transactions yet.</p>
+        <p className="text-sm leading-6 text-slate-400">No onchain transactions yet. Your wallet will show a claim submission here once it is confirmed.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#0D1428] rounded-2xl p-6">
-      <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-4">
+    <div className="rounded-3xl bg-[#0D1428] p-6 shadow-xl shadow-slate-900/10">
+      <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">
         Transaction Timeline
       </p>
       <div className="space-y-3">
