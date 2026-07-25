@@ -116,8 +116,10 @@ contract MandateHookTest is Test {
         vm.stopPrank();
     }
 
-    function _swapAsConcierge(int256 amountSpecified) internal {
-        vm.prank(concierge);
+    /// @dev Sells CASA for mUSD as `who`, announcing `who` through hookData. Kept free of
+    ///      any external call before the swap so `vm.expectRevert` binds to the swap itself.
+    function _swapAs(address who, int256 amountSpecified) internal {
+        vm.prank(who);
         swapRouter.swap(
             poolKey,
             SwapParams({
@@ -126,8 +128,12 @@ contract MandateHookTest is Test {
                 sqrtPriceLimitX96: casaIsToken0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
             }),
             PoolSwapTest.TestSettings({ takeClaims: false, settleUsingBurn: false }),
-            abi.encode(concierge)
+            abi.encode(who)
         );
+    }
+
+    function _swapAsConcierge(int256 amountSpecified) internal {
+        _swapAs(concierge, amountSpecified);
     }
 
     function _expectNotAuthorized(bytes4 hookFn, address wallet, bytes32 reason) internal {
@@ -153,16 +159,27 @@ contract MandateHookTest is Test {
         _swapAsConcierge(-150e18); // cap is 100
     }
 
-    function test_stranger_cannot_swap() public {
-        vm.startPrank(stranger);
-        vm.expectRevert(); // wrapped NotAuthorized(NO_MANDATE); exact bytes checked above pattern
-        swapRouter.swap(
-            poolKey,
-            SwapParams({ zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1 }),
-            PoolSwapTest.TestSettings({ takeClaims: false, settleUsingBurn: false }),
-            abi.encode(stranger)
-        );
+    /// @notice A compliant owner takes the hook's fast path: no mandate needed, no cap applied.
+    function test_compliant_owner_can_swap() public {
+        vm.startPrank(ownerA);
+        treasury.HOUSE_TOKEN().approve(address(swapRouter), type(uint256).max);
+        musd.approve(address(swapRouter), type(uint256).max);
         vm.stopPrank();
+
+        uint256 before = musd.balanceOf(ownerA);
+        _swapAs(ownerA, -10e18);
+        assertGt(musd.balanceOf(ownerA), before);
+    }
+
+    function test_expired_mandate_blocks_agent_swap() public {
+        vm.warp(uint256(FUTURE) + 1);
+        _expectNotAuthorized(IHooks.beforeSwap.selector, concierge, "MANDATE_EXPIRED");
+        _swapAsConcierge(-1e18);
+    }
+
+    function test_stranger_cannot_swap() public {
+        _expectNotAuthorized(IHooks.beforeSwap.selector, stranger, "NO_MANDATE");
+        _swapAs(stranger, -1e18);
     }
 
     function test_owner_revocation_kills_agent_swaps() public {
