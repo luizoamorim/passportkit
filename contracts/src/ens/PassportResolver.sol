@@ -60,7 +60,7 @@ contract PassportResolver {
         Tenant memory t = tenantOf[parentOf[node]];
         bytes32 k = keccak256(bytes(key));
         if (k == keccak256("compliance.status")) {
-            if (id == address(0) || address(t.gate) == address(0)) return "NONE";
+            if (id == address(0) || address(t.gate).code.length == 0) return "NONE";
             (bool ok,) = t.gate.isEligible(id, t.policyId);
             return ok ? "GREEN" : "REVOKED"; // flips automatically on revocation
         }
