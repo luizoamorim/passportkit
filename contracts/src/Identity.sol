@@ -32,7 +32,6 @@ contract Identity {
         bytes   signature;  // issuer's EIP-712 signature
         bytes   data;       // hash/reference — NEVER PII
         uint64  expiresAt;  // 0 = no expiry
-        bool    revoked;
         bool    exists;
     }
     mapping(uint256 => mapping(address => Claim)) private _claim; // topic => issuer => claim
@@ -95,7 +94,7 @@ contract Identity {
             _countByTopic[topic] += 1;
         }
         c.topic = topic; c.issuer = issuer; c.signature = sig; c.data = data;
-        c.expiresAt = expiresAt; c.revoked = false; c.exists = true;
+        c.expiresAt = expiresAt; c.exists = true;
 
         claimId = keccak256(abi.encode(issuer, topic));
         emit ClaimAdded(claimId, topic, issuer, expiresAt);
@@ -108,9 +107,9 @@ contract Identity {
     function revokeClaim(uint256 topic, address issuer) external {
         // same missing-CLAIM-key condition as submitClaim → same error (NoClaimKey)
         if (!keyHasPurpose(keyForAddress(msg.sender), KeyPurpose.CLAIM)) revert NoClaimKey();
-        Claim storage c = _claim[topic][issuer];
-        if (!c.exists) revert NoClaimToRevoke(); // don't emit ClaimRevoked for a non-existent claim
-        c.revoked = true;
+        if (!_claim[topic][issuer].exists) revert NoClaimToRevoke(); // nothing to remove
+        delete _claim[topic][issuer]; // full removal — frees the per-topic cap slot
+        _countByTopic[topic] -= 1;
         emit ClaimRevoked(topic, issuer);
     }
 
@@ -122,7 +121,7 @@ contract Identity {
         external view returns (bool exists, bytes memory sig, bytes memory data)
     {
         Claim storage c = _claim[topic][issuer];
-        if (!(c.exists && !c.revoked)) return (false, bytes(""), bytes(""));
+        if (!c.exists) return (false, bytes(""), bytes(""));
         return (true, c.signature, c.data);
     }
 }

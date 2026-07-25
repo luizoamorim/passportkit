@@ -131,6 +131,32 @@ contract IdentityTest is Test {
         id.revokeClaim(kyc, address(issuer)); // never submitted
     }
 
+    /// revokeClaim frees a cap slot: at MAX, revoking one lets a new issuer's claim land.
+    function test_revoke_frees_cap_slot() public {
+        uint256 cap = id.MAX_CLAIMS_PER_TOPIC();
+        address first;
+        for (uint256 i; i < cap; ++i) {
+            MockClaimIssuer mi = new MockClaimIssuer();
+            reg.setTrusted(address(mi), kyc, true);
+            if (i == 0) first = address(mi);
+            vm.prank(owner);
+            id.submitClaim(kyc, address(mi), sig, data, exp);
+        }
+        // at cap: a new issuer reverts
+        MockClaimIssuer extra = new MockClaimIssuer();
+        reg.setTrusted(address(extra), kyc, true);
+        vm.prank(owner);
+        vm.expectRevert(Identity.TopicCap.selector);
+        id.submitClaim(kyc, address(extra), sig, data, exp);
+        // revoke one → frees the slot → the new issuer now fits
+        vm.prank(owner);
+        id.revokeClaim(kyc, first);
+        vm.prank(owner);
+        id.submitClaim(kyc, address(extra), sig, data, exp);
+        (bool exists,,) = id.getClaim(kyc, address(extra));
+        assertTrue(exists);
+    }
+
     /// MAX_CLAIMS_PER_TOPIC griefing cap: the (cap+1)-th trusted issuer's claim reverts.
     function test_maxClaimsPerTopic_cap() public {
         uint256 cap = id.MAX_CLAIMS_PER_TOPIC();
