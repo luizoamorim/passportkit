@@ -29,6 +29,7 @@ import {
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { foundry, sepolia } from 'viem/chains';
 
+import { ERC20_ABI } from './abis';
 import { decodeRefusal } from './decode.js';
 import { MODIFY_LIQUIDITY_TOPIC, SWAP_TOPIC, poolIdOf } from './positions.js';
 import { clearTickets } from './tickets';
@@ -326,6 +327,25 @@ export async function refreshLogs(): Promise<RawLog[]> {
     cache.nextBlock = latest + 1n;
   }
   return cache.logs;
+}
+
+// ---------------------------------------------------------------- token reads
+
+export const readBalance = (token: Address, wallet: Address): Promise<bigint> =>
+  publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'balanceOf', args: [wallet] });
+
+/// A wallet's PROP/mUSD row, keyed by symbol — the shape the actor cards render.
+export async function balancesOf(wallet: Address): Promise<Record<string, string>> {
+  const A = addresses();
+  const [t0, t1] = await Promise.all([readBalance(A.token0, wallet), readBalance(A.token1, wallet)]);
+  return { [A.token0Symbol]: fixed(t0), [A.token1Symbol]: fixed(t1) };
+}
+
+/// after − before, per symbol: what one swap or liquidity move cost the actor.
+export function deltasBetween(before: Record<string, string>, after: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.keys(after).map((symbol) => [symbol, (Number(after[symbol]) - Number(before[symbol])).toFixed(2)]),
+  );
 }
 
 // ---------------------------------------------------------------- writes

@@ -10,15 +10,16 @@
  *
  * Demo-only: DEMO_MODE must be 'true' or every method here is a 403.
  */
-import { decodeAbiParameters, formatEther, keccak256, pad, toHex, type Address, type Hex } from 'viem';
+import { formatEther, pad, type Address } from 'viem';
 
-import { CLAIM_DATA_ABI, ERC20_ABI, FACTORY_ABI, GATE_ABI, HOOK_ABI, IDENTITY_ABI, ISSUER_ABI, TREASURY_ABI } from '@/lib/demo/abis';
+import { GATE_ABI, HOOK_ABI, TREASURY_ABI } from '@/lib/demo/abis';
 import {
   EXPLORER_URL,
   OWNERS,
   ZERO_ADDRESS,
   addresses,
   assertDemo,
+  balancesOf,
   bytes32ToString,
   chainNow,
   demoDisabledResponse,
@@ -30,23 +31,19 @@ import {
   jsonResponse,
   pools,
   publicClient,
+  readBalance,
   refreshLogs,
   resetWorld,
   timewarp,
   actorAddress,
   type DemoActor,
 } from '@/lib/demo/chain';
+import { CLAIM_TOPICS, claimState, identityOf, isCompliant } from '@/lib/demo/identity';
 import { aggregateLiquidity, lastPrices } from '@/lib/demo/positions.js';
 import { listTickets } from '@/lib/demo/tickets';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// ERC-735 topics: uint256(keccak256(name)) — same numbers as libraries/Types.sol
-const CLAIM_TOPICS = {
-  kyc: BigInt(keccak256(toHex('KYC_VERIFIED'))),
-  accredited: BigInt(keccak256(toHex('ACCREDITED_INVESTOR'))),
-};
 
 /// The three actors that hold an Identity. The concierge and the plumber are plain
 /// wallets by design — the agent's authority is the owners', never its own — and
@@ -56,51 +53,6 @@ const IDENTITY_ACTORS: DemoActor[] = ['operator', 'ana', 'rui'];
 const saltOf = (wallet: Address) => pad(wallet, { size: 32 }).toLowerCase();
 
 // ---------------------------------------------------------------- reads
-
-async function identityOf(wallet: Address): Promise<Address | null> {
-  const identity = await publicClient.readContract({
-    address: addresses().identityFactory,
-    abi: FACTORY_ABI,
-    functionName: 'identityOfWallet',
-    args: [wallet],
-  });
-  return identity === ZERO_ADDRESS ? null : identity;
-}
-
-/// Status of one topic on an identity: what the ISSUER thinks of the stored claim.
-async function claimState(identity: Address | null, topic: bigint, now: number) {
-  if (!identity) return { status: 'UNVERIFIED', expiresAt: null };
-  const A = addresses();
-  const [exists, , data] = await publicClient.readContract({
-    address: identity,
-    abi: IDENTITY_ABI,
-    functionName: 'getClaim',
-    args: [topic, A.claimIssuer],
-  });
-  if (!exists) return { status: 'UNVERIFIED', expiresAt: null };
-
-  const [, expiresAt] = decodeAbiParameters(CLAIM_DATA_ABI, data);
-  const revoked = await publicClient.readContract({
-    address: A.claimIssuer,
-    abi: ISSUER_ABI,
-    functionName: 'revoked',
-    args: [identity, topic],
-  });
-  const expired = expiresAt !== 0n && now > Number(expiresAt);
-  return {
-    status: revoked ? 'REVOKED' : expired ? 'EXPIRED' : 'VERIFIED',
-    expiresAt: expiresAt === 0n ? null : Number(expiresAt),
-  };
-}
-
-const readBalance = (token: Address, wallet: Address) =>
-  publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'balanceOf', args: [wallet] });
-
-async function balancesOf(wallet: Address): Promise<Record<string, string>> {
-  const A = addresses();
-  const [t0, t1] = await Promise.all([readBalance(A.token0, wallet), readBalance(A.token1, wallet)]);
-  return { [A.token0Symbol]: fixed(t0), [A.token1Symbol]: fixed(t1) };
-}
 
 /// One actor row: identity, both claims, both pool verdicts with their reason
 /// codes, LP positions and balances — the hook demo's `actorState`, verbatim.
@@ -146,20 +98,6 @@ async function actorState(name: DemoActor, now: number, positions: Map<string, b
     },
     balances: await balancesOf(wallet),
   };
-}
-
-/// The same read the treasury makes on-chain: wallet → identity → gate. A wallet
-/// with no identity is never compliant, so the UI agrees with isCompliantOwner.
-async function isCompliant(wallet: Address): Promise<boolean> {
-  const identity = await identityOf(wallet);
-  if (!identity) return false;
-  const [ok] = await publicClient.readContract({
-    address: addresses().eligibilityGate,
-    abi: GATE_ABI,
-    functionName: 'isEligible',
-    args: [identity, pools().house.policyId],
-  });
-  return ok;
 }
 
 async function readOwners() {

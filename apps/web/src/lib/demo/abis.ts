@@ -3,6 +3,9 @@
  * apps/hook-demo/server.js and apps/concierge/server.js so the routes agree with
  * the standalone demos call for call.
  */
+import type { Abi } from 'viem';
+
+import { MODIFY_LIQUIDITY_EVENT, SWAP_EVENT } from './positions.js';
 
 // Identity claim payload: abi.encode(dataHash, expiresAt, nonce) — a hash, never PII
 export const CLAIM_DATA_ABI = [{ type: 'bytes32' }, { type: 'uint64' }, { type: 'bytes32' }] as const;
@@ -199,3 +202,167 @@ export const ERC20_ABI = [
     outputs: [{ type: 'bool' }],
   },
 ] as const;
+
+// ---------------------------------------------------------------- tx inspector
+
+// The v4 PoolManager events already live in positions.js (they double as the
+// liquidity/price source), so the inspector borrows them instead of restating them.
+const V4_POOL_EVENTS = [MODIFY_LIQUIDITY_EVENT, SWAP_EVENT] as unknown as Abi;
+
+/// Every event GET /api/demo/tx/<hash> can name — the union of what the two
+/// standalone servers decoded, on the new stack: identity + issuer, the house
+/// treasury, and the v4 PoolManager. Transfer is handled separately below.
+export const INSPECTOR_EVENTS: Abi = [
+  // --- identity + issuer ---
+  {
+    type: 'event',
+    name: 'IdentityCreated',
+    inputs: [
+      { name: 'wallet', type: 'address', indexed: true },
+      { name: 'identity', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'ClaimAdded',
+    inputs: [
+      { name: 'claimId', type: 'bytes32', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'ClaimRevoked',
+    inputs: [
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'issuer', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'KeyAdded',
+    inputs: [
+      { name: 'key', type: 'bytes32', indexed: true },
+      { name: 'purpose', type: 'uint256', indexed: true },
+    ],
+  },
+  // the revocation latch — the money moment, in one log line
+  {
+    type: 'event',
+    name: 'RevocationSet',
+    inputs: [
+      { name: 'identity', type: 'address', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'revoked', type: 'bool', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'TrustedSet',
+    inputs: [
+      { name: 'issuer', type: 'address', indexed: true },
+      { name: 'topic', type: 'uint256', indexed: true },
+      { name: 'ok', type: 'bool', indexed: false },
+    ],
+  },
+  // --- HouseTreasury ---
+  {
+    type: 'event',
+    name: 'MandateGranted',
+    inputs: [
+      { name: 'agent', type: 'address', indexed: true },
+      { name: 'perTxCap', type: 'uint256', indexed: false },
+      { name: 'expiresAt', type: 'uint64', indexed: false },
+    ],
+  },
+  { type: 'event', name: 'MandateRevoked', inputs: [{ name: 'agent', type: 'address', indexed: true }] },
+  {
+    type: 'event',
+    name: 'ConciergeFunded',
+    inputs: [
+      { name: 'agent', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'Deposited',
+    inputs: [
+      { name: 'from', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PaymentProposed',
+    inputs: [
+      { name: 'id', type: 'uint256', indexed: true },
+      { name: 'vendor', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'evidenceHash', type: 'bytes32', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PaymentApproved',
+    inputs: [
+      { name: 'id', type: 'uint256', indexed: true },
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'approvals', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PaymentExecuted',
+    inputs: [
+      { name: 'id', type: 'uint256', indexed: true },
+      { name: 'vendor', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  // --- v4 PoolManager ---
+  ...V4_POOL_EVENTS,
+  {
+    type: 'event',
+    name: 'Initialize',
+    inputs: [
+      { name: 'id', type: 'bytes32', indexed: true },
+      { name: 'currency0', type: 'address', indexed: true },
+      { name: 'currency1', type: 'address', indexed: true },
+      { name: 'fee', type: 'uint24', indexed: false },
+      { name: 'tickSpacing', type: 'int24', indexed: false },
+      { name: 'hooks', type: 'address', indexed: false },
+      { name: 'sqrtPriceX96', type: 'uint160', indexed: false },
+      { name: 'tick', type: 'int24', indexed: false },
+    ],
+  },
+];
+
+/// ERC-20 (value in data) and ERC-721 (tokenId indexed) share the Transfer topic,
+/// so they cannot sit in one ABI: a decoder stops at the first name match. Tried
+/// in order — the topic count tells them apart.
+export const TRANSFER_EVENT_VARIANTS: Abi[] = [
+  [
+    {
+      type: 'event',
+      name: 'Transfer',
+      inputs: [
+        { name: 'from', type: 'address', indexed: true },
+        { name: 'to', type: 'address', indexed: true },
+        { name: 'tokenId', type: 'uint256', indexed: true },
+      ],
+    },
+  ],
+  [
+    {
+      type: 'event',
+      name: 'Transfer',
+      inputs: [
+        { name: 'from', type: 'address', indexed: true },
+        { name: 'to', type: 'address', indexed: true },
+        { name: 'value', type: 'uint256', indexed: false },
+      ],
+    },
+  ],
+];

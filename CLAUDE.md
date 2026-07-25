@@ -28,8 +28,14 @@ An Identity is not only for a person. A person can spawn an **x402 agent** that 
 
 ## Demo runtime (`apps/web`, local anvil only)
 - **One world, one file:** `contracts/script/DeployAll.s.sol` deploys the whole stack — both ComplianceHook pools *and* the house treasury on one PoolManager — and writes `apps/web/demo-addresses.json` (gitignored). Resetting one surface no longer wipes the other's contracts.
-- `apps/web/src/lib/demo/` — the runtime lifted out of the two standalone `server.js` files. `decode.js` (refusal decoding), `positions.js` (pool logs → liquidity/price/positions), `deciders.js`, `evidence.js`, `x402.js` moved **unchanged**; `chain.ts` (viem clients, actor wallets, `addresses()`, `assertDemo()`, reset/timewarp), `abis.ts` and `tickets.ts` are new.
-- `apps/web/src/app/api/demo/**` — the route handlers. `GET /api/demo/world` is the single state read every demo page uses; `POST /api/demo/world` takes `{action:'reset'|'timewarp', days?}`.
+- `apps/web/src/lib/demo/` — the runtime lifted out of the two standalone `server.js` files. `decode.js` (refusal decoding), `positions.js` (pool logs → liquidity/price/positions), `deciders.js`, `evidence.js`, `x402.js` moved **unchanged**; `chain.ts` (viem clients, actor wallets, `addresses()`, `assertDemo()`, reset/timewarp), `identity.ts` (claim topics, `identityOf`/`isCompliant`, the EIP-712 signer, the revocation latch), `abis.ts` and `tickets.ts` are new.
+- `apps/web/src/app/api/demo/**` — the route handlers:
+  - `GET /api/demo/world` — the single state read every demo page uses; `POST` takes `{action:'reset'|'timewarp', days?}`.
+  - `POST /api/demo/markets` — `{action:'swap'|'liquidity'|'verify'|'revoke', actor, pool?:'deal'|'investor', claim?:'kyc'|'accredited', direction?:'add'|'remove', zeroForOne?, approved?}`. `verify` doubles as restore (it re-opens the latch first); `revoke` with no `claim` revokes every topic.
+  - `POST /api/demo/concierge` — `{action:'ticket'|'approve'|'fund'|'grant-mandate'|'revoke-mandate'|'revoke-owner-kyc'|'restore-owner-kyc', …}`; `ticket` takes `{description, amount, category}` and returns the ticket record (`status: paid|pending-approval|executed|rejected|refused|unsettled`).
+  - `GET /api/demo/tx/<hash>` — receipt + logs decoded to named events and labelled contracts.
+  - `POST /api/demo/vendor/invoice` — the mock plumber speaking x402: 402 challenge without `X-PAYMENT`, `{paid,jobId}` once the referenced tx is verified against the chain.
+- **A refusal is a 200, not a 5xx.** The chain saying no is the demo, so the action routes answer `{ok:false, reason, wallet, message}` (or a ticket carrying `refusal`) and the page renders the reason code — `MISSING_KYC`, `MISSING_ACCREDITED`, `OWNER_NOT_COMPLIANT`, `MANDATE_REVOKED`, `OVER_PER_TX_CAP`. Only a malformed request is a 4xx.
 - **Gated on `DEMO_MODE=true`:** every handler calls `assertDemo()` first and returns 403 otherwise. The anvil actor private keys live only in `chain.ts` (server bundle) — never in a `NEXT_PUBLIC_*` var, and never imported from a client component.
 - Tests: `npm test --workspace=apps/web` runs `node --test test/demo/`. `src/lib/demo/` and `test/` each carry a one-line `package.json` (`{"type":"module"}`) so node loads the ESM libs directly without making the whole Next app ESM.
 
