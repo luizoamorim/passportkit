@@ -1,6 +1,8 @@
 .PHONY: help up up-testnet down api cre web db migrate ngrok logs \
         test-kyc test-green test-red status stop reset-db \
-        build-cre env-check deploy-testnet deploy-local anvil
+        build-cre env-check deploy-testnet deploy-local anvil \
+        demo demo-chain demo-deploy demo-web demo-stop \
+        hook-demo hook-demo-explorer concierge-demo
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -13,11 +15,35 @@ WEB_LOG       := /tmp/passport-web.log
 NGROK_LOG     := /tmp/passport-ngrok.log
 ANVIL_LOG     := /tmp/passport-anvil.log
 
+# ─── The unified demo ─────────────────────────────────────────────────────────
+# Both ports are overridable so a second copy of the repo can run its own world
+# without touching the one already on :8545 —
+#   make demo RPC_PORT=8546 WEB_PORT=3010
+
+RPC_PORT        ?= 8545
+WEB_PORT        ?= 3003
+DEMO_RPC        := http://127.0.0.1:$(RPC_PORT)
+DEMO_URL        := http://localhost:$(WEB_PORT)
+DEMO_ANVIL_LOG  := /tmp/passport-demo-anvil.log
+DEMO_DEPLOY_LOG := /tmp/passport-demo-deploy.log
+DEMO_WEB_LOG    := /tmp/passport-demo-web.log
+
+# The canonical CREATE2 deployer the v4 hook address mining needs. Anvil ships
+# it at genesis but anvil_reset drops it, so a demo re-run on an already-reset
+# chain re-etches it rather than failing with "missing CREATE2 deployer".
+CREATE2_ADDR := 0x4e59b44847b379578588920cA78FbF26c0B4956C
+CREATE2_CODE := 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3
+
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
 help:
 	@echo ""
 	@echo "  PassportCreds by Node — dev commands"
+	@echo ""
+	@echo "  The demo"
+	@echo "    make demo          — anvil + one deployed world + the site on :$(WEB_PORT)"
+	@echo "                         (override with RPC_PORT=… WEB_PORT=…)"
+	@echo "    make demo-stop     — stop just that anvil and that site"
 	@echo ""
 	@echo "  Setup"
 	@echo "    make env-check     — verify .env files exist"
@@ -316,17 +342,94 @@ deploy-testnet:
 	@echo "    apps/web/.env.local"
 	@echo ""
 
-# ─── Uniswap v4 hook demo ─────────────────────────────────────────────────────
+# ─── The unified demo — one command ───────────────────────────────────────────
+
+demo: demo-chain demo-deploy demo-web
+	@echo ""
+	@echo "══════════════════════════════════════════"
+	@echo "  PassportKit demo — one world, one site"
+	@echo ""
+	@echo "  Chain:     $(DEMO_RPC) (anvil)"
+	@echo "  Site:      $(DEMO_URL)"
+	@echo ""
+	@echo "  1. Get verified      $(DEMO_URL)/passport"
+	@echo "  2. Enter the room    $(DEMO_URL)/deal-room"
+	@echo "  3. Trade the pool    $(DEMO_URL)/markets"
+	@echo "  4. Mandate an agent  $(DEMO_URL)/concierge"
+	@echo ""
+	@echo "  Logs: $(DEMO_ANVIL_LOG) · $(DEMO_DEPLOY_LOG) · $(DEMO_WEB_LOG)"
+	@echo "  Stop: make demo-stop"
+	@echo "══════════════════════════════════════════"
+	@echo ""
+
+# Reuses an anvil that is already listening rather than restarting it — a
+# restart would wipe the world every other demo is pointed at.
+demo-chain:
+	@if curl -sf -m 2 -X POST $(DEMO_RPC) -H "Content-Type: application/json" \
+	     -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' > /dev/null 2>&1; then \
+	  echo "✓ Anvil already up on :$(RPC_PORT) — reusing it"; \
+	else \
+	  echo "→ Starting Anvil on :$(RPC_PORT) (log: $(DEMO_ANVIL_LOG))"; \
+	  anvil --port $(RPC_PORT) > $(DEMO_ANVIL_LOG) 2>&1 & \
+	  for i in 1 2 3 4 5 6 7 8 9 10; do \
+	    sleep 1; \
+	    curl -sf -m 2 -X POST $(DEMO_RPC) -H "Content-Type: application/json" \
+	      -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' > /dev/null 2>&1 && break; \
+	  done; \
+	  curl -sf -m 2 -X POST $(DEMO_RPC) -H "Content-Type: application/json" \
+	    -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' > /dev/null 2>&1 \
+	    && echo "✓ Anvil up on :$(RPC_PORT)" \
+	    || (echo "✗ Anvil failed — check $(DEMO_ANVIL_LOG)" && exit 1); \
+	fi
+
+demo-deploy:
+	@echo "→ Deploying the one demo world to $(DEMO_RPC) (log: $(DEMO_DEPLOY_LOG))"
+	@CODE=$$(cast code $(CREATE2_ADDR) --rpc-url $(DEMO_RPC) 2>/dev/null || echo 0x); \
+	 if [ "$$CODE" = "0x" ] || [ -z "$$CODE" ]; then \
+	   cast rpc anvil_setCode $(CREATE2_ADDR) $(CREATE2_CODE) --rpc-url $(DEMO_RPC) > /dev/null 2>&1 \
+	     && echo "  · CREATE2 deployer re-etched"; \
+	 fi
+	@cd contracts && forge script script/DeployAll.s.sol --rpc-url $(DEMO_RPC) --broadcast \
+	  > $(DEMO_DEPLOY_LOG) 2>&1 \
+	  && echo "✓ World deployed — apps/web/demo-addresses.json written" \
+	  || (echo "✗ Deploy failed — check $(DEMO_DEPLOY_LOG)" && tail -20 $(DEMO_DEPLOY_LOG) && exit 1)
+
+demo-web:
+	@echo "→ Starting the site on :$(WEB_PORT) with DEMO_MODE=true (log: $(DEMO_WEB_LOG))"
+	@lsof -ti:$(WEB_PORT) -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
+	@pkill -f "[n]ext dev -p $(WEB_PORT)" 2>/dev/null || true
+	@sleep 1
+	@cd apps/web && RPC_URL=$(DEMO_RPC) WEB_PORT=$(WEB_PORT) npm run demo > $(DEMO_WEB_LOG) 2>&1 &
+	@for i in $$(seq 1 40); do sleep 1; curl -sf -m 2 $(DEMO_URL) > /dev/null 2>&1 && break; done
+	@curl -sf -m 5 $(DEMO_URL) > /dev/null 2>&1 \
+	  && echo "✓ Site up on $(DEMO_URL)" \
+	  || (echo "✗ Site failed to start — check $(DEMO_WEB_LOG)" && exit 1)
+
+# Only ever touches the two ports this demo owns. `-sTCP:LISTEN` keeps the kill
+# to the servers rather than anything merely *connected* to them, and the pkill
+# patterns are the exact command lines `demo-chain`/`demo-web` start — a bare
+# `pkill anvil` would take down whatever else the machine runs on another port,
+# and `next dev` hides its listener behind an npm wrapper the port lookup can
+# miss. `[n]`/`[a]` is the usual trick to stop pkill from matching its own shell.
+demo-stop:
+	@echo "→ Stopping the demo (:$(WEB_PORT), :$(RPC_PORT))..."
+	@lsof -ti:$(WEB_PORT) -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
+	@pkill -f "[n]ext dev -p $(WEB_PORT)" 2>/dev/null || true
+	@lsof -ti:$(RPC_PORT) -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
+	@pkill -f "[a]nvil --port $(RPC_PORT)" 2>/dev/null || true
+	@echo "✓ Demo stopped"
+
+# ─── Deprecated aliases (the two standalone demos are now routes) ─────────────
 
 hook-demo:
-	@cd apps/hook-demo && npm install --no-fund --no-audit && npm start
+	@echo "⚠ make hook-demo is deprecated — the hook demo is /markets in the unified site. Running make demo."
+	@$(MAKE) demo
+
+concierge-demo:
+	@echo "⚠ make concierge-demo is deprecated — the concierge demo is /concierge in the unified site. Running make demo."
+	@$(MAKE) demo
 
 hook-demo-explorer:
 	@echo "Otterscan explorer for the local anvil chain → http://localhost:5100"
 	@docker run --rm -p 5100:80 --add-host=host.docker.internal:host-gateway \
-	  -e ERIGON_URL=http://host.docker.internal:8545 otterscan/otterscan:latest
-
-# ─── House Concierge agent demo ───────────────────────────────────────────────
-
-concierge-demo:
-	@cd apps/concierge && npm install --no-fund --no-audit && npm start
+	  -e ERIGON_URL=http://host.docker.internal:$(RPC_PORT) otterscan/otterscan:latest
