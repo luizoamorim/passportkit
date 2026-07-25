@@ -1,0 +1,15 @@
+{
+  "name": "passportkit-subgraph",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:sepolia": "node scripts/prepare.js sepolia",
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy": "graph deploy passportkit-sepolia"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.98.0",
+    "@graphprotocol/graph-ts": "^0.38.0"
+  }
+}

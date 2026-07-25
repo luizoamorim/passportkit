@@ -1,0 +1,206 @@
+# PassportKit subgraph — claim lifecycle, agent links, revocation latches, policies,
+# gated transfers and index-time eligibility snapshots. See docs/specs/graph-spec.md.
+
+enum ClaimStatus {
+  ACTIVE   # submitted and not latched
+  REMOVED  # holder voluntarily removed it (Identity.revokeClaim)
+  REVOKED  # issuer latch is ON for this identity+topic (ClaimIssuer.setRevoked)
+}
+
+enum ClaimEventKind {
+  ADDED      # holder submitted an issuer-signed claim
+  REMOVED    # holder removed their own claim
+  LATCH_ON   # issuer revoked (the money moment)
+  LATCH_OFF  # issuer re-opened for re-verification
+}
+
+enum AgentEventKind {
+  LINKED
+  UNLINKED
+  SCORE_SET
+}
+
+# ---------------------------------------------------------------- current state
+
+type Identity @entity(immutable: false) {
+  id: Bytes!                       # identity contract address
+  wallet: Bytes!                   # owner wallet (MANAGEMENT key)
+  createdAt: BigInt!
+  createdAtBlock: BigInt!
+  createdTx: Bytes!
+  claims: [Claim!]! @derivedFrom(field: "identity")
+  latches: [RevocationLatch!]! @derivedFrom(field: "identity")
+  agents: [AgentLink!]! @derivedFrom(field: "personIdentity")
+  policyStatuses: [PassportPolicyStatus!]! @derivedFrom(field: "identity")
+  claimEvents: [ClaimEvent!]! @derivedFrom(field: "identity")
+  agentEvents: [AgentEvent!]! @derivedFrom(field: "personIdentity")
+  snapshots: [EligibilitySnapshot!]! @derivedFrom(field: "identity")
+  subnames: [Subname!]! @derivedFrom(field: "identity")
+}
+
+# One row per wallet the factory knows — person wallets AND agent wallets.
+# Mirrors IdentityFactory.identityOfWallet.
+type Wallet @entity(immutable: false) {
+  id: Bytes!                       # wallet address
+  identity: Identity               # null after an agent is unlinked
+  isAgent: Boolean!
+}
+
+type Claim @entity(immutable: false) {
+  id: String!                      # identity-topic-issuer
+  identity: Identity!
+  topic: BigInt!
+  topicName: String!
+  issuer: Issuer!
+  dataHash: Bytes                  # from abi.encode(dataHash, expiresAt, nonce) — never PII
+  expiresAt: BigInt                # 0 = no expiry
+  status: ClaimStatus!
+  addedAt: BigInt!
+  updatedAt: BigInt!
+}
+
+# The issuer-held revocation latch, per identity+topic+issuer (ClaimIssuer.revoked).
+type RevocationLatch @entity(immutable: false) {
+  id: String!                      # identity-topic-issuer
+  identity: Identity!
+  issuer: Issuer!                  # the ClaimIssuer holding the latch
+  topic: BigInt!
+  topicName: String!
+  revoked: Boolean!
+  updatedAt: BigInt!
+}
+
+type AgentLink @entity(immutable: false) {
+  id: Bytes!                       # agent wallet address
+  agentWallet: Bytes!
+  personIdentity: Identity!
+  active: Boolean!
+  score: BigInt
+  linkedAt: BigInt!
+  unlinkedAt: BigInt
+}
+
+type Issuer @entity(immutable: false) {
+  id: Bytes!                       # issuer contract address
+  trust: [IssuerTrust!]! @derivedFrom(field: "issuer")
+  claims: [Claim!]! @derivedFrom(field: "issuer")
+}
+
+type IssuerTrust @entity(immutable: false) {
+  id: String!                      # issuer-topic
+  issuer: Issuer!
+  topic: BigInt!
+  topicName: String!
+  trusted: Boolean!
+  updatedAt: BigInt!
+  # Claim ids ever landed under this issuer+topic. Mappings cannot scan the
+  # store, so this is the enumerable index that lets TrustedSet re-snapshot
+  # every affected identity. Append-only; bounded per identity by
+  # MAX_CLAIMS_PER_TOPIC but unbounded across identities (fine at demo scale —
+  # production would page this through a cursor entity).
+  claimIds: [String!]!
+}
+
+type Policy @entity(immutable: false) {
+  id: String!                      # policyId, decimal
+  policyId: BigInt!
+  topics: [BigInt!]!
+  topicNames: [String!]!
+  updatedAt: BigInt!
+}
+
+# Latest gate outcome per identity+policy, refreshed at index time on every
+# claim/latch event (EligibilityGate.isEligible called from the mapping).
+type PassportPolicyStatus @entity(immutable: false) {
+  id: String!                      # identity-policyId
+  identity: Identity!
+  policy: Policy!
+  eligible: Boolean!
+  reason: String!
+  updatedAt: BigInt!
+}
+
+type Subname @entity(immutable: false) {
+  id: String!                      # parentNode-label
+  parentNode: Bytes!
+  label: String!
+  wallet: Bytes!
+  identity: Identity
+  issuedAt: BigInt!
+}
+
+type Tenant @entity(immutable: false) {
+  id: Bytes!                       # parentNode
+  gate: Bytes!
+  policyId: BigInt!
+  controller: Bytes!
+  updatedAt: BigInt!
+}
+
+type SignerStatus @entity(immutable: false) {
+  id: String!                      # issuer-signer
+  issuer: Bytes!
+  signer: Bytes!
+  authorized: Boolean!
+  updatedAt: BigInt!
+}
+
+# Singleton (id = "protocol") — lets mappings enumerate policies + find the gate.
+type Protocol @entity(immutable: false) {
+  id: String!
+  gate: Bytes!
+  policyIds: [BigInt!]!
+}
+
+# ---------------------------------------------------------------- audit trail
+
+type ClaimEvent @entity(immutable: true) {
+  id: Bytes!                       # tx hash + log index
+  kind: ClaimEventKind!
+  identity: Identity!
+  wallet: Bytes                    # identity owner, denormalized for wallet-first queries
+  topic: BigInt!
+  topicName: String!
+  issuer: Bytes
+  txHash: Bytes!
+  block: BigInt!
+  timestamp: BigInt!
+}
+
+type AgentEvent @entity(immutable: true) {
+  id: Bytes!
+  kind: AgentEventKind!
+  agentWallet: Bytes!
+  personIdentity: Identity
+  score: BigInt
+  txHash: Bytes!
+  block: BigInt!
+  timestamp: BigInt!
+}
+
+type TokenTransfer @entity(immutable: true) {
+  id: Bytes!
+  token: Bytes!
+  from: Bytes!
+  to: Bytes!
+  value: BigInt!
+  isMint: Boolean!
+  isBurn: Boolean!
+  txHash: Bytes!
+  block: BigInt!
+  timestamp: BigInt!
+}
+
+# History of the gate's answer — what no contract stores on-chain.
+type EligibilitySnapshot @entity(immutable: true) {
+  id: Bytes!                       # tx hash + log index + policyId
+  identity: Identity!
+  wallet: Bytes
+  policy: Policy!
+  eligible: Boolean!
+  reason: String!
+  trigger: String!                 # the event that caused this re-check
+  txHash: Bytes!
+  block: BigInt!
+  timestamp: BigInt!
+}

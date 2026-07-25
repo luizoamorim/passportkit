@@ -1,0 +1,193 @@
+# Template — subgraph.yaml is GENERATED from this file by scripts/prepare.js,
+# which fills addresses + startBlock from contracts/deployments/<chainid>.json
+# (fallback: config/<network>.json). Do not edit subgraph.yaml by hand.
+specVersion: 1.2.0
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: IdentityFactory
+    network: {{network}}
+    source:
+      address: "{{IdentityFactory}}"
+      abi: IdentityFactory
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [Identity, Wallet, AgentLink, AgentEvent, EligibilitySnapshot, PassportPolicyStatus]
+      abis:
+        - name: IdentityFactory
+          file: ./abis/IdentityFactory.json
+        - name: EligibilityGate
+          file: ./abis/EligibilityGate.json
+      eventHandlers:
+        - event: IdentityCreated(indexed address,indexed address)
+          handler: handleIdentityCreated
+        - event: AgentLinked(indexed address,indexed address)
+          handler: handleAgentLinked
+        - event: AgentUnlinked(indexed address,indexed address)
+          handler: handleAgentUnlinked
+      file: ./src/factory.ts
+  - kind: ethereum
+    name: ClaimIssuer
+    network: {{network}}
+    source:
+      address: "{{ClaimIssuer}}"
+      abi: ClaimIssuer
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [RevocationLatch, Claim, ClaimEvent, SignerStatus, Identity, Issuer, EligibilitySnapshot, PassportPolicyStatus]
+      abis:
+        - name: ClaimIssuer
+          file: ./abis/ClaimIssuer.json
+        - name: EligibilityGate
+          file: ./abis/EligibilityGate.json
+      eventHandlers:
+        - event: RevocationSet(indexed address,indexed uint256,bool)
+          handler: handleRevocationSet
+        - event: SignerSet(indexed address,bool)
+          handler: handleSignerSet
+      file: ./src/claim-issuer.ts
+  - kind: ethereum
+    name: IssuerRegistry
+    network: {{network}}
+    source:
+      address: "{{IssuerRegistry}}"
+      abi: IssuerRegistry
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [Issuer, IssuerTrust, Claim, Identity, EligibilitySnapshot, PassportPolicyStatus]
+      abis:
+        - name: IssuerRegistry
+          file: ./abis/IssuerRegistry.json
+        - name: EligibilityGate
+          file: ./abis/EligibilityGate.json
+      eventHandlers:
+        - event: TrustedSet(indexed address,indexed uint256,bool)
+          handler: handleTrustedSet
+      file: ./src/issuer-registry.ts
+  - kind: ethereum
+    name: EligibilityGate
+    network: {{network}}
+    source:
+      address: "{{EligibilityGate}}"
+      abi: EligibilityGate
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [Policy, Protocol]
+      abis:
+        - name: EligibilityGate
+          file: ./abis/EligibilityGate.json
+      eventHandlers:
+        - event: PolicySet(indexed uint256,uint256[])
+          handler: handlePolicySet
+      file: ./src/gate.ts
+  - kind: ethereum
+    name: GatedERC20
+    network: {{network}}
+    source:
+      address: "{{GatedERC20}}"
+      abi: GatedERC20
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [TokenTransfer]
+      abis:
+        - name: GatedERC20
+          file: ./abis/GatedERC20.json
+      eventHandlers:
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+      file: ./src/token.ts
+  - kind: ethereum
+    name: ScoreRegistry
+    network: {{network}}
+    source:
+      address: "{{ScoreRegistry}}"
+      abi: ScoreRegistry
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [AgentLink, AgentEvent]
+      abis:
+        - name: ScoreRegistry
+          file: ./abis/ScoreRegistry.json
+      eventHandlers:
+        - event: ScoreSet(indexed address,uint256)
+          handler: handleScoreSet
+      file: ./src/score.ts
+  - kind: ethereum
+    name: PassportSubnameRegistrar
+    network: {{network}}
+    source:
+      address: "{{PassportSubnameRegistrar}}"
+      abi: PassportSubnameRegistrar
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [Subname, Identity]
+      abis:
+        - name: PassportSubnameRegistrar
+          file: ./abis/PassportSubnameRegistrar.json
+      eventHandlers:
+        - event: SubnameIssued(indexed bytes32,string,indexed address,address)
+          handler: handleSubnameIssued
+      file: ./src/ens.ts
+  - kind: ethereum
+    name: PassportResolver
+    network: {{network}}
+    source:
+      address: "{{PassportResolver}}"
+      abi: PassportResolver
+      startBlock: {{startBlock}}
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [Tenant]
+      abis:
+        - name: PassportResolver
+          file: ./abis/PassportResolver.json
+      eventHandlers:
+        - event: TenantSet(indexed bytes32,address,uint256,address)
+          handler: handleTenantSet
+      file: ./src/ens.ts
+templates:
+  - kind: ethereum/contract
+    name: Identity
+    network: {{network}}
+    source:
+      abi: Identity
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities: [Claim, ClaimEvent, Identity, Issuer, IssuerTrust, EligibilitySnapshot, PassportPolicyStatus]
+      abis:
+        - name: Identity
+          file: ./abis/Identity.json
+        - name: EligibilityGate
+          file: ./abis/EligibilityGate.json
+      eventHandlers:
+        - event: ClaimAdded(indexed bytes32,indexed uint256,indexed address)
+          handler: handleClaimAdded
+        - event: ClaimRevoked(indexed uint256,indexed address)
+          handler: handleClaimRevoked
+      file: ./src/identity.ts

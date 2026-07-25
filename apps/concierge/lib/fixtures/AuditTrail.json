@@ -1,0 +1,193 @@
+{
+  "data": {
+    "wallet": {
+      "id": "0xa11ce00000000000000000000000000000000001",
+      "isAgent": false,
+      "identity": {
+        "id": "0x1d0a11ce00000000000000000000000000000001",
+        "wallet": "0xa11ce00000000000000000000000000000000001",
+        "createdAt": "1758931200",
+        "createdTx": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "claims": [
+          {
+            "id": "c1",
+            "topicName": "KYC_VERIFIED",
+            "status": "ACTIVE",
+            "expiresAt": "1785196800",
+            "addedAt": "1759017600",
+            "updatedAt": "1784764800",
+            "issuer": {
+              "id": "0xc1a1000000000000000000000000000000000001"
+            }
+          },
+          {
+            "id": "c2",
+            "topicName": "ACCREDITED_INVESTOR",
+            "status": "ACTIVE",
+            "expiresAt": "1785974400",
+            "addedAt": "1759881600",
+            "updatedAt": "1759881600",
+            "issuer": {
+              "id": "0xc1a1000000000000000000000000000000000001"
+            }
+          }
+        ],
+        "latches": [
+          {
+            "topicName": "KYC_VERIFIED",
+            "revoked": false,
+            "updatedAt": "1784764800"
+          }
+        ],
+        "claimEvents": [
+          {
+            "kind": "ADDED",
+            "topicName": "KYC_VERIFIED",
+            "issuer": "0xc1a1000000000000000000000000000000000001",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000002",
+            "block": "100",
+            "timestamp": "1759017600"
+          },
+          {
+            "kind": "ADDED",
+            "topicName": "ACCREDITED_INVESTOR",
+            "issuer": "0xc1a1000000000000000000000000000000000001",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "block": "120",
+            "timestamp": "1759881600"
+          },
+          {
+            "kind": "LATCH_ON",
+            "topicName": "KYC_VERIFIED",
+            "issuer": "0xc1a1000000000000000000000000000000000001",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000004",
+            "block": "500",
+            "timestamp": "1784678400"
+          },
+          {
+            "kind": "LATCH_OFF",
+            "topicName": "KYC_VERIFIED",
+            "issuer": "0xc1a1000000000000000000000000000000000001",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000005",
+            "block": "520",
+            "timestamp": "1784764800"
+          }
+        ],
+        "snapshots": [
+          {
+            "policy": {
+              "id": "1"
+            },
+            "eligible": true,
+            "reason": "OK",
+            "trigger": "ClaimAdded(KYC_VERIFIED)",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000002",
+            "timestamp": "1759017600"
+          },
+          {
+            "policy": {
+              "id": "2"
+            },
+            "eligible": true,
+            "reason": "OK",
+            "trigger": "ClaimAdded(ACCREDITED_INVESTOR)",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "timestamp": "1759881600"
+          },
+          {
+            "policy": {
+              "id": "1"
+            },
+            "eligible": false,
+            "reason": "MISSING_KYC",
+            "trigger": "RevocationSet(KYC_VERIFIED ON)",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000004",
+            "timestamp": "1784678400"
+          },
+          {
+            "policy": {
+              "id": "2"
+            },
+            "eligible": false,
+            "reason": "MISSING_KYC",
+            "trigger": "RevocationSet(KYC_VERIFIED ON)",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000004",
+            "timestamp": "1784678400"
+          },
+          {
+            "policy": {
+              "id": "1"
+            },
+            "eligible": true,
+            "reason": "OK",
+            "trigger": "RevocationSet(KYC_VERIFIED OFF)",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000005",
+            "timestamp": "1784764800"
+          },
+          {
+            "policy": {
+              "id": "2"
+            },
+            "eligible": true,
+            "reason": "OK",
+            "trigger": "RevocationSet(KYC_VERIFIED OFF)",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000005",
+            "timestamp": "1784764800"
+          }
+        ],
+        "agents": [
+          {
+            "agentWallet": "0xa9e7000000000000000000000000000000000001",
+            "active": true,
+            "score": "87",
+            "linkedAt": "1783209600",
+            "unlinkedAt": null
+          }
+        ],
+        "agentEvents": [
+          {
+            "id": "ae-1",
+            "kind": "LINKED",
+            "agentWallet": "0xa9e7000000000000000000000000000000000001",
+            "score": null,
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "timestamp": "1783209600"
+          },
+          {
+            "id": "ae-2",
+            "kind": "SCORE_SET",
+            "agentWallet": "0xa9e7000000000000000000000000000000000001",
+            "score": "87",
+            "txHash": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "timestamp": "1783296000"
+          }
+        ],
+        "subnames": [
+          {
+            "label": "alice",
+            "parentNode": "0xca5aa20000000000000000000000000000000000000000000000000000000000"
+          }
+        ]
+      }
+    },
+    "agentEvents": [],
+    "transfersOut": [
+      {
+        "to": "0xb0b0000000000000000000000000000000000001",
+        "value": "25000000000000000000",
+        "isBurn": false,
+        "txHash": "0x0000000000000000000000000000000000000000000000000000000000000006",
+        "timestamp": "1783641600"
+      }
+    ],
+    "transfersIn": [
+      {
+        "from": "0x0000000000000000000000000000000000000000",
+        "value": "100000000000000000000",
+        "isMint": true,
+        "txHash": "0x0000000000000000000000000000000000000000000000000000000000000007",
+        "timestamp": "1783555200"
+      }
+    ]
+  }
+}

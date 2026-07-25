@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-07-25 — The Graph: subgraph + compliance-officer agent
+
+- **Subgraph** (`subgraph/`) indexing the PassportKit stack on Ethereum Sepolia:
+  identities (dynamic data-source template per user Identity contract), claim
+  lifecycle (`ClaimAdded`/`ClaimRevoked` with the expiry decoded out of the signed
+  payload via `getClaim`), the issuer revocation latch (`RevocationSet`), issuer
+  trust, policies, agent links (`AgentLinked`/`AgentUnlinked` + scores), gated
+  transfers and ENS subnames/tenants. On every claim/latch/issuer-trust event the
+  mapping **re-runs `EligibilityGate.isEligible` at index time** and stores the snapshot —
+  the subgraph holds the *history of the gate's answers*, which no contract stores.
+  Manifest is generated from `contracts/deployments/<chainid>.json` (no hand-edited
+  addresses); `npm run prepare:sepolia && npm run codegen && npm run build` is green.
+- **Compliance-officer agent** (`apps/concierge`): answers a closed set of question
+  types by querying the **live** Graph gateway and citing the exact GraphQL query +
+  rows used — "which claims expire in N days", "blast radius if issuer X is revoked"
+  (redundant-coverage aware, maps losses to surfaces, includes linked agents going
+  down with their person), "full audit trail for wallet 0x…" (claims, latch flips,
+  gate outcomes, agent links, transfers — time-ordered). Deterministic assembly;
+  optional narrator (`OFFICER_NARRATOR=mock|openai`, same pattern as `DECIDER`)
+  rephrases the summary but never invents facts.
+- **Demo page** `/officer` (same look as the demo apps): question → live GraphQL
+  query → cited answer, with a clearly-labeled **Simulate (recorded fixture)**
+  fallback — presentation insurance only, the judged flow hits the live gateway.
+- **Tests:** 36 new JS tests (query builders, intent routing, answer assembly, expiry
+  handling, URL redaction, narrator fallback) against recorded fixtures — 71 green in
+  `apps/concierge`.
+- **Ops (pending human):** Subgraph Studio deploy (`graph auth` + `npm run deploy`)
+  and gateway API key; addresses land automatically once the Sepolia deploy writes
+  `contracts/deployments/11155111.json`.
+
+---
+
 ## 2026-07-25 — Uniswap v4 hook + House Concierge Agent
 
 - **Uniswap v4 `ComplianceHook` + local demo** (PR #1) — the AccessGate that guards the

@@ -98,6 +98,31 @@ replacing the local hash with the 0G TEE attestation.
 Bonus beat: submit a ticket with a category outside the allowlist (e.g. `travel`) —
 the decider rejects it before touching the chain, rationale and evidence hash included.
 
+## Compliance officer (The Graph)
+
+`/officer` is a second surface on this server: a compliance officer that answers
+questions by querying the **live PassportKit subgraph** (see `subgraph/`) and
+citing the exact GraphQL query + rows behind every answer. Three question types:
+
+1. `Which passports/claims expire in the next N days?`
+2. `What is the blast radius if issuer 0x… is revoked?` — redundant-coverage aware;
+   maps losses to policies + enforcement surfaces and counts the linked agents that
+   go down with their person.
+3. `Full audit trail for wallet 0x…` — claims, latch flips, indexed `isEligible`
+   outcomes, agent links and gated transfers, time-ordered.
+
+Config (`.env`): `SUBGRAPH_URL` (Studio dev URL or gateway URL), `GRAPH_API_KEY`
+(gateway only), `OFFICER_NARRATOR=mock|openai` (mock = deterministic template;
+openai rephrases the summary, never the facts, falls back to mock). The page's
+**Simulate (recorded fixture)** button is presentation insurance only — the judged
+flow queries the live gateway, and answers are always badged LIVE vs SIMULATED.
+
+```
+GET  /officer                page: question → live GraphQL query → cited answer
+GET  /api/officer/config     {live, url, narrator, supported}
+POST /api/officer/ask        {"question":"…","simulate":false}
+```
+
 ## API
 
 ```
@@ -139,7 +164,7 @@ Timewarp and reset are local-only; mandate-expiry demos need real time on testne
 
 ```bash
 cd contracts && forge test --match-path 'test/agents/*'   # HouseToken 4 · HouseTreasury 23 · MandateHook 9
-cd apps/concierge && npm test                             # 35: decider rules, x402 client, evidence hashing, decoders
+cd apps/concierge && npm test                             # 71: decider rules, x402 client, evidence hashing, decoders, officer + graph
 ```
 
 Spec and design notes: [`docs/specs/agent-concierge-spec.md`](../../docs/specs/agent-concierge-spec.md).
