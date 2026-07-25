@@ -1,6 +1,6 @@
 import { ethereum } from '@graphprotocol/graph-ts';
 import { ClaimAdded, ClaimRevoked, Identity as IdentityContract } from '../generated/templates/Identity/Identity';
-import { Claim, ClaimEvent } from '../generated/schema';
+import { Claim, ClaimEvent, IssuerTrust } from '../generated/schema';
 import { eventId, getOrCreateIdentity, getOrCreateIssuer, snapshotEligibility, topicName } from './helpers';
 
 export function handleClaimAdded(event: ClaimAdded): void {
@@ -38,6 +38,35 @@ export function handleClaimAdded(event: ClaimAdded): void {
     }
   }
   claim.save();
+
+  // index this claim under its issuer+topic so a later TrustedSet can find and
+  // re-snapshot every identity it affects (mappings cannot scan the store)
+  const trustId = issuerAddr.toHexString() + '-' + topic.toString();
+  let trust = IssuerTrust.load(trustId);
+  if (trust == null) {
+    // claims only land while the issuer is trusted (submitClaim checks the
+    // registry), so a missing row means the TrustedSet predates our startBlock
+    trust = new IssuerTrust(trustId);
+    trust.issuer = issuerAddr;
+    trust.topic = topic;
+    trust.topicName = topicName(topic);
+    trust.trusted = true;
+    trust.updatedAt = event.block.timestamp;
+    trust.claimIds = [];
+  }
+  const ids = trust.claimIds;
+  let known = false;
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i] == claimId) {
+      known = true;
+      break;
+    }
+  }
+  if (!known) {
+    ids.push(claimId);
+    trust.claimIds = ids;
+  }
+  trust.save();
 
   const ev = new ClaimEvent(eventId(event));
   ev.kind = 'ADDED';

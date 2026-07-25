@@ -64,10 +64,12 @@ dataSources:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
-      entities: [Issuer, IssuerTrust]
+      entities: [Issuer, IssuerTrust, Claim, EligibilitySnapshot, PassportPolicyStatus]
       abis:
         - name: IssuerRegistry
           file: ./abis/IssuerRegistry.json
+        - name: EligibilityGate
+          file: ./abis/EligibilityGate.json
       eventHandlers:
         - event: TrustedSet(indexed address,indexed uint256,bool)
           handler: handleTrustedSet

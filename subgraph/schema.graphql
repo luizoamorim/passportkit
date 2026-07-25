@@ -33,6 +33,7 @@ type Identity @entity(immutable: false) {
   agents: [AgentLink!]! @derivedFrom(field: "personIdentity")
   policyStatuses: [PassportPolicyStatus!]! @derivedFrom(field: "identity")
   claimEvents: [ClaimEvent!]! @derivedFrom(field: "identity")
+  agentEvents: [AgentEvent!]! @derivedFrom(field: "personIdentity")
   snapshots: [EligibilitySnapshot!]! @derivedFrom(field: "identity")
   subnames: [Subname!]! @derivedFrom(field: "identity")
 }
@@ -92,6 +93,12 @@ type IssuerTrust @entity(immutable: false) {
   topicName: String!
   trusted: Boolean!
   updatedAt: BigInt!
+  # Claim ids ever landed under this issuer+topic. Mappings cannot scan the
+  # store, so this is the enumerable index that lets TrustedSet re-snapshot
+  # every affected identity. Append-only; bounded per identity by
+  # MAX_CLAIMS_PER_TOPIC but unbounded across identities (fine at demo scale —
+  # production would page this through a cursor entity).
+  claimIds: [String!]!
 }
 
 type Policy @entity(immutable: false) {

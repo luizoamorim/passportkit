@@ -84,7 +84,9 @@ export function snapshotEligibility(identityAddr: Address, trigger: string, even
     status.updatedAt = event.block.timestamp;
     status.save();
 
-    const snap = new EligibilitySnapshot(eventId(event).concatI32(i));
+    // id includes the identity: one event (e.g. TrustedSet) can snapshot MANY
+    // identities, and immutable entities cannot share an id.
+    const snap = new EligibilitySnapshot(eventId(event).concat(identityAddr).concatI32(i));
     snap.identity = identity.id;
     snap.wallet = identity.wallet;
     snap.policy = policyId.toString();
