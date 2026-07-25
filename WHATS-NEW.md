@@ -28,8 +28,9 @@
 - **Demo page** `/officer` (same look as the demo apps): question → live GraphQL
   query → cited answer, with a clearly-labeled **Simulate (recorded fixture)**
   fallback — presentation insurance only, the judged flow hits the live gateway.
-- **Tests:** 28 new JS tests (query builders, intent routing, answer assembly,
-  narrator fallback) against recorded fixtures — 63 green in `apps/concierge`.
+- **Tests:** 36 new JS tests (query builders, intent routing, answer assembly, expiry
+  handling, URL redaction, narrator fallback) against recorded fixtures — 71 green in
+  `apps/concierge`.
 - **Ops (pending human):** Subgraph Studio deploy (`graph auth` + `npm run deploy`)
   and gateway API key; addresses land automatically once the Sepolia deploy writes
   `contracts/deployments/11155111.json`.

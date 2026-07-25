@@ -48,7 +48,8 @@
 |---|---|---|
 | `Identity` | `ClaimAdded(claimId, topic, issuer)` | holder submitted an issuer-signed claim |
 | `Identity` | `ClaimRevoked(topic, issuer)` | holder voluntarily removed a claim |
-| `Identity` | `KeyAdded(key, purpose)` | ERC-734 key |
+
+(`Identity.KeyAdded` is deliberately NOT indexed — no officer question needs ERC-734 keys.)
 
 **Expiry:** `ClaimAdded` does not carry the claim payload; the handler calls
 `Identity.getClaim(topic, issuer)` and decodes `data = abi.encode(dataHash, expiresAt, nonce)`
@@ -68,7 +69,8 @@ Current-state entities (mutable):
 - **`Claim`** — id = `identity-topic-issuer`; `topic`, `topicName` (reverse-keccak of the three
   known topics), `issuer`, `dataHash`, `expiresAt`, `status` (`ACTIVE` / `REMOVED` / `REVOKED`),
   timestamps. `REVOKED` mirrors the issuer latch for that identity+topic.
-- **`RevocationLatch`** — id = `identity-topic` on the ClaimIssuer; `revoked`, `updatedAt`.
+- **`RevocationLatch`** — id = `identity-topic-issuer` (each ClaimIssuer holds its own latch
+  map); `revoked`, `updatedAt`.
 - **`AgentLink`** — id = agent wallet; `personIdentity`, `active`, `score`, `linkedAt`, `unlinkedAt`.
 - **`Issuer`** — id = issuer address; `topics` via **`IssuerTrust`** (id = `issuer-topic`,
   `trusted`, plus `claimIds` — the enumerable index that lets a TrustedSet flip re-snapshot
@@ -119,9 +121,17 @@ queries are shown verbatim on the demo page next to the data they returned.
 ```
 
 - `lib/graph.js` — gateway client (`SUBGRAPH_URL`, `GRAPH_API_KEY`) + pure query builders.
+  URLs surfaced to the browser are redacted (the legacy gateway form embeds the key in-path).
 - `lib/officer.js` — intent parsing, answer assembly, citation packing. Pure functions.
-- Tests (`node --test`): builders + assembly against **recorded fixtures** in `test/fixtures/`.
-  The fixtures never serve the demo path.
+  Claim **expiry is enforced in the assembly** (no event fires at expiry, so indexed status
+  stays ACTIVE — the filter lives where both the live path and the fixtures pass through).
+- Tests (`node --test`): builders + assembly against **recorded fixtures** in `lib/fixtures/`
+  (shared with the labeled Simulate fallback). The fixtures never serve the judged path.
+
+**Known staleness (documented, accepted for the demo):** `SignerSet` (global signer kill) and
+`PolicySet` (policy re-composition) do NOT fan out `PassportPolicyStatus` refreshes — unlike
+claims, latches and `TrustedSet`, which do. Statuses self-heal on the next per-identity event;
+the authoritative answer is always one live `isEligible` call away.
 
 ---
 

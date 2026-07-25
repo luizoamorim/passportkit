@@ -276,7 +276,7 @@ anything above the per-tx cap is queued for m-of-n owner approval with the agent
 decision hash anchored on-chain.
 
 - Local demo: `make concierge-demo` → http://localhost:4190 (anvil + deploy + mock x402 vendor on :4191)
-- Tests: `cd contracts && forge test --match-path 'test/agents/*'` (29) and `cd apps/concierge && npm test` (28)
+- Tests: `cd contracts && forge test --match-path 'test/agents/*'` (29) and `cd apps/concierge && npm test` (71, incl. the compliance officer)
 - Spec & design notes: [`docs/specs/agent-concierge-spec.md`](docs/specs/agent-concierge-spec.md)
 
 ### The Graph: Subgraph + Compliance-Officer Agent
@@ -291,7 +291,7 @@ behind every answer: claims expiring in N days, the blast radius of revoking an
 issuer (who loses which surface, agents included), and full per-wallet audit trails.
 
 - Demo page: `make concierge-demo` → http://localhost:4190/officer
-- Tests: `cd apps/concierge && npm test` (query builders + assembly on recorded fixtures)
+- Tests: `cd apps/concierge && npm test` (36 officer tests: builders + assembly on recorded fixtures)
 - Spec & design notes: [`docs/specs/graph-spec.md`](docs/specs/graph-spec.md)
 
 ---
