@@ -209,6 +209,7 @@ sequenceDiagram
 ### Luiz Henrique — Ops + glue (this afternoon; Rafael & Noé do NOT wait on this)
 - **Deploy (Sepolia):** set `ENS_PARENT_NODE` (the `passportkit.eth` namehash from Noé) in `contracts/.env` so `DeployPassportKit.s.sol` wires `setTenant` automatically; run the deploy; copy `deployments/11155111.json` into api + web `.env` and the subgraph manifest. _(ENS name registration + resolver + subname approval are Noé's — see his lane.)_
 - **Backend `POST /identity/create`:** ✅ already built (`feature/backend-identity-create`) — just needs the deployed factory address in `.env`.
+- **ENSIP-25 (Verifiable Agent Identity):** the "clever ENS" upgrade — `PassportResolver` serves the `agent-registration[...]` text record **computed live** from `IdentityFactory` (link an agent → the ENSIP-25 attestation exists; unlink → it flips off). Full impl spec: [`specs/ensip-25-agent-identity.md`](./specs/ensip-25-agent-identity.md).
 - **Decide** the personhood-policy question (§5) — default already wired, just confirm/flip.
 - Demo script + fallbacks.
 
