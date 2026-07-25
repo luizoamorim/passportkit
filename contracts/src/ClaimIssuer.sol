@@ -62,10 +62,13 @@ contract ClaimIssuer is IClaimIssuer, AccessControl, EIP712 {
         external view override returns (bool)
     {
         if (revoked[identity][topic]) return false;                 // ← per-user revocation
+        // total validator: malformed encoding -> invalid, not a revert
+        if (data.length != 96) return false; // abi.encode(bytes32,uint64,bytes32) == 3 words
         (bytes32 dataHash, uint64 expiresAt, bytes32 nonce) = abi.decode(data, (bytes32, uint64, bytes32));
         if (dataHash == bytes32(0)) return false;
         if (expiresAt != 0 && block.timestamp > expiresAt) return false;
-        address signer = ECDSA.recover(_digest(identity, topic, dataHash, expiresAt, nonce), sig);
+        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(_digest(identity, topic, dataHash, expiresAt, nonce), sig);
+        if (err != ECDSA.RecoverError.NoError) return false; // malformed sig -> invalid, not a revert
         return isAuthorizedSigner[signer];                          // ← global lever
     }
 

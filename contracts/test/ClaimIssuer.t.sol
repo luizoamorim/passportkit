@@ -115,4 +115,20 @@ contract ClaimIssuerTest is Test {
         vm.expectRevert();
         issuer.setRevoked(identity, kyc, true);
     }
+
+    function test_malformed_data_returns_false() public view {
+        bytes memory someSig = hex"1234";
+        // data is NOT 96 bytes -> total validator returns false instead of reverting
+        assertFalse(issuer.isClaimValid(identity, kyc, someSig, hex"1234"));
+    }
+
+    function test_malformed_sig_returns_false() public view {
+        bytes32 dh = keccak256("kyc");
+        uint64 exp = uint64(block.timestamp + 1 days);
+        bytes32 nonce = keccak256("n1");
+        bytes memory data = _data(dh, exp, nonce); // valid 96-byte encoding
+        bytes memory bogusSig = hex"1234";         // malformed short signature
+        // malformed sig -> tryRecover errors -> false, not a revert
+        assertFalse(issuer.isClaimValid(identity, kyc, bogusSig, data));
+    }
 }

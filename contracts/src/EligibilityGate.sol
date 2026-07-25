@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {Reason, IClaimIssuer} from "./libraries/Types.sol";
+import {Reason, IClaimIssuer, ClaimTopics} from "./libraries/Types.sol";
 
 interface IIdentity {
     /// @return exists false if there's no claim OR the holder locally removed it
@@ -30,7 +30,10 @@ contract EligibilityGate is AccessControl {
 
     event PolicySet(uint256 indexed policyId, uint256[] topics);
 
+    error ZeroIssuerRegistry();
+
     constructor(address admin, address issuerRegistry) {
+        if (issuerRegistry == address(0)) revert ZeroIssuerRegistry();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         issuers = IIssuerRegistry(issuerRegistry);
     }
@@ -41,7 +44,7 @@ contract EligibilityGate is AccessControl {
     }
 
     function isEligible(address identity, uint256 policyId) external view returns (bool ok, bytes32 reason) {
-        if (identity == address(0)) return (false, Reason.NO_IDENTITY);
+        if (identity == address(0) || identity.code.length == 0) return (false, Reason.NO_IDENTITY);
         uint256[] memory req = policyTopics[policyId];
         for (uint256 i; i < req.length; ++i) {
             if (!_hasValidClaim(identity, req[i])) return (false, _reasonFor(req[i]));
@@ -67,9 +70,9 @@ contract EligibilityGate is AccessControl {
     }
 
     function _reasonFor(uint256 topic) internal pure returns (bytes32) {
-        if (topic == uint256(keccak256("KYC_VERIFIED")))        return Reason.MISSING_KYC;
-        if (topic == uint256(keccak256("PROOF_OF_PERSONHOOD"))) return Reason.MISSING_PERSONHOOD;
-        if (topic == uint256(keccak256("ACCREDITED_INVESTOR"))) return Reason.MISSING_ACCREDITED;
+        if (topic == ClaimTopics.KYC_VERIFIED)        return Reason.MISSING_KYC;
+        if (topic == ClaimTopics.PROOF_OF_PERSONHOOD) return Reason.MISSING_PERSONHOOD;
+        if (topic == ClaimTopics.ACCREDITED_INVESTOR) return Reason.MISSING_ACCREDITED;
         return "MISSING_CLAIM";
     }
 }
