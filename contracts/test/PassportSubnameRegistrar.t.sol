@@ -52,7 +52,7 @@ contract PassportSubnameRegistrarTest is Test {
     function setUp() public {
         wrapper = new MockNameWrapper();
         resolver = new PassportResolver();
-        registrar = new PassportSubnameRegistrar(address(wrapper), address(resolver));
+        registrar = new PassportSubnameRegistrar(address(wrapper), address(resolver), address(this));
         // registrar is the tenant's controller so resolver.setIdentity is authorized
         resolver.setTenant(parentNode, address(0xDEAD), policyId, address(registrar));
     }
@@ -86,5 +86,11 @@ contract PassportSubnameRegistrarTest is Test {
         resolver.setTenant(otherParent, address(0xDEAD), policyId, address(0xCAFE));
         vm.expectRevert(bytes("not controller"));
         registrar.issueSubname(otherParent, "bob", userWallet, identity);
+    }
+
+    function test_issueSubname_onlyIssuer_reverts() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert();
+        registrar.issueSubname(parentNode, "x", userWallet, identity);
     }
 }

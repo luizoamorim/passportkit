@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface IEligibilityGate {
     function isEligible(address identity, uint256 policyId) external view returns (bool, bytes32);
@@ -23,24 +24,46 @@ interface IIdentityResolver {
  *
  * "Compliance blocks movement to a counterparty (transfer/swap), never your own exit (burn)."
  */
-contract GatedERC20 is ERC20 {
+contract GatedERC20 is ERC20, AccessControl {
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
     IEligibilityGate public immutable gate;
     IIdentityResolver public immutable resolver; // wallet -> identity
     uint256 public immutable policyId; // e.g. requires KYC_VERIFIED
 
     error NotEligible(address wallet, bytes32 reason);
+    error ZeroGate();
+    error ZeroResolver();
+    error ZeroAdmin();
 
-    constructor(string memory name_, string memory symbol_, address gate_, address resolver_, uint256 policyId_)
-        ERC20(name_, symbol_)
-    {
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        address gate_,
+        address resolver_,
+        uint256 policyId_,
+        address admin
+    ) ERC20(name_, symbol_) {
+        if (gate_ == address(0)) revert ZeroGate();
+        if (resolver_ == address(0)) revert ZeroResolver();
+        if (admin == address(0)) revert ZeroAdmin();
+
         gate = IEligibilityGate(gate_);
         resolver = IIdentityResolver(resolver_);
         policyId = policyId_;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(MINTER_ROLE, admin);
     }
 
-    /// @notice Demo mint. In production this is gated to an issuer/agent role.
-    function mint(address to, uint256 amt) public {
+    /// @notice Mint gated to MINTER_ROLE (issuer/agent role).
+    function mint(address to, uint256 amt) public onlyRole(MINTER_ROLE) {
         _mint(to, amt);
+    }
+
+    /// @notice Public burn — free exit. Holders can always redeem their own tokens.
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
     }
 
     function _update(address from, address to, uint256 value) internal override {

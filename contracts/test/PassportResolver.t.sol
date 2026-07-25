@@ -72,6 +72,23 @@ contract PassportResolverTest is Test {
         assertFalse(resolver.supportsInterface(0xffffffff));
     }
 
+    function test_setTenant_takeover_reverts() public {
+        // parentNode already has a controller (set in setUp); a different sender cannot overwrite it
+        vm.prank(address(0xBAD));
+        vm.expectRevert(PassportResolver.NotController.selector);
+        resolver.setTenant(parentNode, address(gate), policyId, address(0xBAD));
+    }
+
+    function test_setTenant_controller_can_update() public {
+        // the current controller can update the tenant config on the same parentNode
+        uint256 newPolicyId = 99;
+        vm.prank(controller);
+        resolver.setTenant(parentNode, address(gate), newPolicyId, controller);
+
+        (, uint256 gotPolicyId,) = resolver.tenantOf(parentNode);
+        assertEq(gotPolicyId, newPolicyId);
+    }
+
     function test_two_tenants_resolve_independently() public {
         // second tenant with its own gate, flipped off
         MockGate gate2 = new MockGate();

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+
 interface INameWrapper {
     function setSubnodeRecord(
         bytes32 parentNode,
@@ -26,9 +28,11 @@ interface IPassportResolver {
  * via their owner wallet). Subnames are created programmatically - zero manual UI. This is what
  * makes PassportKit an SDK: a tenant onboards users and the kit mints their identity name by code.
  */
-contract PassportSubnameRegistrar {
+contract PassportSubnameRegistrar is AccessControl {
     INameWrapper public immutable nameWrapper;
     IPassportResolver public immutable resolver;
+
+    bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
 
     // demo defaults; tune per tenant/name policy
     uint32 public constant FUSES = 0;
@@ -36,14 +40,20 @@ contract PassportSubnameRegistrar {
 
     event SubnameIssued(bytes32 indexed parentNode, string label, address indexed userWallet, address identity);
 
-    constructor(address nameWrapper_, address resolver_) {
+    error ZeroAdmin();
+
+    constructor(address nameWrapper_, address resolver_, address admin) {
+        if (admin == address(0)) revert ZeroAdmin();
         nameWrapper = INameWrapper(nameWrapper_);
         resolver = IPassportResolver(resolver_);
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(ISSUER_ROLE, admin);
     }
 
     /// @notice Issue `label.<tenant>.eth` owned by the user, resolving via PassportResolver.
     function issueSubname(bytes32 parentNode, string calldata label, address userWallet, address identity)
         external
+        onlyRole(ISSUER_ROLE)
         returns (bytes32 node)
     {
         // (auth: gate to the tenant's controller/backend in production)

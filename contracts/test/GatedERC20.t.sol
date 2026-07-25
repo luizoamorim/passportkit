@@ -4,17 +4,6 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {GatedERC20} from "../src/GatedERC20.sol";
 
-/// Test harness: exposes _burn so we can prove the free-exit path (base ERC20 has no public burn).
-contract GatedERC20Harness is GatedERC20 {
-    constructor(string memory n, string memory s, address gate_, address resolver_, uint256 policyId_)
-        GatedERC20(n, s, gate_, resolver_, policyId_)
-    {}
-
-    function burn(address from, uint256 amt) external {
-        _burn(from, amt);
-    }
-}
-
 /// Minimal mocks so GatedERC20 can be tested without the real Gate/Factory stack.
 /// MockResolver maps wallet -> identity; MockGate holds a settable eligibility map keyed by identity.
 contract MockResolver {
@@ -42,7 +31,7 @@ contract MockGate {
 }
 
 contract GatedERC20Test is Test {
-    GatedERC20Harness token;
+    GatedERC20 token;
     MockResolver resolver;
     MockGate gate;
 
@@ -70,7 +59,7 @@ contract GatedERC20Test is Test {
         gate.setEligible(bobId, true);
         gate.setEligible(carolId, false);
 
-        token = new GatedERC20Harness("Gated", "GTD", address(gate), address(resolver), POLICY_ID);
+        token = new GatedERC20("Gated", "GTD", address(gate), address(resolver), POLICY_ID, address(this));
     }
 
     // ---- mint ----
@@ -141,10 +130,19 @@ contract GatedERC20Test is Test {
         );
         token.transfer(bob, 1);
 
-        // burn still succeeds -> we never trap funds
-        token.burn(alice, 60);
+        // burn still succeeds -> we never trap funds (holder burns their own tokens)
+        vm.prank(alice);
+        token.burn(60);
 
         assertEq(token.balanceOf(alice), 40);
         assertEq(token.totalSupply(), 40);
+    }
+
+    // ---- mint access control ----
+
+    function test_mint_onlyMinter_reverts() public {
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        token.mint(address(0xBEEF), 1);
     }
 }

@@ -30,9 +30,16 @@ contract PassportResolver {
     event TenantSet(bytes32 indexed parentNode, address gate, uint256 policyId, address controller);
     event IdentitySet(bytes32 indexed node, bytes32 indexed parentNode, address identity);
 
+    error NotController();
+
     /// @notice A tenant registers their gate/policy for their parent name.
     ///         (auth: in production, restrict to the parent's ENS owner.)
+    /// @dev Trust-on-first-use: the first set is open (the tenant's backend claims the
+    ///      parentNode at onboarding); after that only the current controller can update.
+    // NOTE: Production upgrade is full ENS-owner auth via NameWrapper.ownerOf(parentNode).
     function setTenant(bytes32 parentNode, address gate, uint256 policyId, address controller) external {
+        Tenant storage existing = tenantOf[parentNode];
+        if (existing.controller != address(0) && msg.sender != existing.controller) revert NotController();
         tenantOf[parentNode] = Tenant(IEligibilityGate(gate), policyId, controller);
         emit TenantSet(parentNode, gate, policyId, controller);
     }
