@@ -60,7 +60,8 @@ contract PassportResolver {
     error ZeroScoreRegistry();
 
     constructor(address identityFactory_, address scoreRegistry_) {
-        // Must be a contract exposing identityOfWallet — else agent-registration text() lookups revert.
+        // Must be a deployed contract (non-zero + code.length > 0); assumed to implement identityOfWallet()
+        // — otherwise agent-registration text() lookups would revert.
         if (identityFactory_ == address(0) || identityFactory_.code.length == 0) revert ZeroFactory();
         identityFactory = IIdentityLookup(identityFactory_);
         // Optional reputation source; if set it must be a contract (else agent.reputation would revert).
@@ -106,7 +107,7 @@ contract PassportResolver {
         string memory agentRec = _agentRegistrationValue(node, key);
         if (bytes(agentRec).length != 0) return agentRec;
 
-        // agent.reputation[<agentWallet>] -> the agent's reputation score (DEMO: hardcoded in the
+        // agent.reputation[<agentWallet>] -> the agent's reputation score (DEMO: set manually in the
         // ScoreRegistry; production: subgraph / ERC-8004). Gated to agents linked to THIS name.
         string memory rep = _agentReputationValue(node, key);
         if (bytes(rep).length != 0) return rep;

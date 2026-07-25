@@ -7,8 +7,8 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
  * @title ScoreRegistry
  * @notice Minimal per-agent reputation store — a stand-in for an ERC-8004 reputation registry.
  *
- * DEMO: scores are set manually here (hardcoded for the demo). A real deployment feeds this from
- * off-chain behavior — the subgraph risk-signal — or an ERC-8004 reputation registry, and this
+ * DEMO: scores are set manually here by an account with SCORER_ROLE. A real deployment feeds this
+ * from off-chain behavior — the subgraph risk-signal — or an ERC-8004 reputation registry, and this
  * contract (or an adapter) becomes the on-chain source.
  *
  * Surfaced via ENS: `PassportResolver` reads `scoreOf(agent)` to serve the live text record
