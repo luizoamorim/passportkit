@@ -255,6 +255,13 @@ A custom ENS resolver whose `text(node, key)` is **computed on the fly** from th
 
 **ENSIP-25 (Verifiable Agent Identity):** the resolver serves the `agent-registration[...]` record **live** — it returns `"1"` iff the agent wallet is linked to this name's identity in the `IdentityFactory` (constructor-injected). `linkAgent` makes the attestation appear, `unlinkAgent` removes it — no manual `setText`. Spec: [`specs/ensip-25-agent-identity.md`](./specs/ensip-25-agent-identity.md).
 
+**Agent reputation (`agent.reputation[<agent>]`):** also computed live — returns the agent's decimal score from the `ScoreRegistry` (optional, constructor-injected; zero = feature off), gated to agents linked to this name. DEMO: scores are set by hand in the `ScoreRegistry`; production feeds it from the subgraph risk-signal / an ERC-8004 reputation registry. `registry7930()`, `agentRegistrationKey(agent)`, `agentReputationKey(agent)` are exposed so clients build the exact keys.
+
+---
+
+### `ScoreRegistry.sol` — per-agent reputation store (demo stand-in for ERC-8004 reputation)
+`scoreOf[agent]` + `setScore(agent, score)` (`SCORER_ROLE`). A minimal on-chain source the resolver reads to serve `agent.reputation[<agent>]` via ENS. DEMO values are set manually; production would feed it from off-chain behavior (the subgraph) or an ERC-8004 reputation registry.
+
 **White-label:** a single resolver serves **N tenants** — each `parentNode` carries its own `(gate, policyId, controller)`.
 Since ENS calls `text(...)` via `eth_call`, the extra SLOADs **cost the user nothing**.
 
@@ -290,6 +297,7 @@ in the AMM world. Dashed in the diagrams because it isn't implemented.
 | `Identity` | The user's identity (keys + claims) | Owner (Model B) | 2 identity |
 | `IdentityFactory` | Creates Identity + resolves wallet→identity + agents | Backend (AGENT_ROLE) | 2 identity |
 | `EligibilityGate` ⭐ | The single eligibility decision | Admin sets policies | 3 decision |
+| `ScoreRegistry` | Per-agent reputation store (read by the ENS `agent.reputation` record) | Scorer (SCORER_ROLE) | 2 identity |
 | `GatedERC20` | Enforcement on transfers | — (reads the gate) | 4 surface |
 | `PassportResolver` | Enforcement on ENS (read-through) | Tenant's controller | 4 surface |
 | `PassportSubnameRegistrar` | Issuing subnames by code | Tenant (ISSUER_ROLE) | 4 surface |

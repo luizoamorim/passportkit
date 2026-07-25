@@ -7,6 +7,7 @@ import {IssuerRegistry} from "../src/IssuerRegistry.sol";
 import {ClaimIssuer} from "../src/ClaimIssuer.sol";
 import {EligibilityGate} from "../src/EligibilityGate.sol";
 import {IdentityFactory} from "../src/IdentityFactory.sol";
+import {ScoreRegistry} from "../src/ScoreRegistry.sol";
 import {GatedERC20} from "../src/GatedERC20.sol";
 import {PassportResolver} from "../src/ens/PassportResolver.sol";
 import {PassportSubnameRegistrar} from "../src/ens/PassportSubnameRegistrar.sol";
@@ -48,6 +49,7 @@ contract DeployPassportKit is Script {
     address internal tokenAddr;
     address internal resolverAddr;
     address internal subnamesAddr;
+    address internal scoreRegistryAddr;
     address internal adminAddr;
     address internal agentAddr;
     address internal signerAddr;
@@ -89,7 +91,9 @@ contract DeployPassportKit is Script {
         // 4. Surfaces
         //    GatedERC20's "resolver" is the IdentityFactory (wallet -> identity); policy #1 (KYC).
         tokenAddr = address(new GatedERC20("PassportKit Demo", "PKD", address(gate), factoryAddr, 1, agentAddr));
-        PassportResolver resolver = new PassportResolver(factoryAddr); // factory = ENSIP-25 agent registry
+        scoreRegistryAddr = address(new ScoreRegistry(agentAddr)); // agent = SCORER_ROLE (sets demo scores)
+        // factory = ENSIP-25 agent registry; scoreRegistry = agent.reputation source
+        PassportResolver resolver = new PassportResolver(factoryAddr, scoreRegistryAddr);
         resolverAddr = address(resolver);
         subnamesAddr = address(new PassportSubnameRegistrar(nameWrapper, address(resolver), agentAddr));
 
@@ -117,6 +121,7 @@ contract DeployPassportKit is Script {
         console2.log("GatedERC20                ", tokenAddr);
         console2.log("PassportResolver          ", resolverAddr);
         console2.log("PassportSubnameRegistrar  ", subnamesAddr);
+        console2.log("ScoreRegistry             ", scoreRegistryAddr);
         console2.log("--- roles ---");
         console2.log("admin (registry, gate)    ", adminAddr);
         console2.log("agent (issuer/factory/token/subnames)", agentAddr);
@@ -142,6 +147,7 @@ contract DeployPassportKit is Script {
         vm.serializeAddress(obj, "GatedERC20", tokenAddr);
         vm.serializeAddress(obj, "PassportResolver", resolverAddr);
         vm.serializeAddress(obj, "PassportSubnameRegistrar", subnamesAddr);
+        vm.serializeAddress(obj, "ScoreRegistry", scoreRegistryAddr);
         vm.serializeAddress(obj, "admin", adminAddr);
         vm.serializeAddress(obj, "agent", agentAddr);
         string memory json = vm.serializeAddress(obj, "issuerSigner", signerAddr);

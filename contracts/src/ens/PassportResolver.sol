@@ -9,6 +9,10 @@ interface IIdentityLookup {
     function identityOfWallet(address wallet) external view returns (address);
 }
 
+interface IScoreLookup {
+    function scoreOf(address wallet) external view returns (uint256);
+}
+
 /**
  * @title PassportResolver  (ENS surface - tenant-aware read-through)
  * @notice A custom ENS resolver whose text(node,key) is COMPUTED LIVE. Two live records:
@@ -39,6 +43,10 @@ contract PassportResolver {
     ///         set at deploy (the factory is deployed before the resolver).
     IIdentityLookup public immutable identityFactory;
 
+    /// @notice Optional per-agent reputation source for the `agent.reputation[..]` record.
+    ///         Zero = feature disabled (record returns "").
+    IScoreLookup public immutable scoreRegistry;
+
     mapping(bytes32 => Tenant) public tenantOf; // parentNode => tenant config
     mapping(bytes32 => address) public identityOf; // node => OnchainID
     mapping(bytes32 => bytes32) public parentOf; // node => parentNode
@@ -49,11 +57,15 @@ contract PassportResolver {
     error NotController();
     error ZeroController();
     error ZeroFactory();
+    error ZeroScoreRegistry();
 
-    constructor(address identityFactory_) {
+    constructor(address identityFactory_, address scoreRegistry_) {
         // Must be a contract exposing identityOfWallet — else agent-registration text() lookups revert.
         if (identityFactory_ == address(0) || identityFactory_.code.length == 0) revert ZeroFactory();
         identityFactory = IIdentityLookup(identityFactory_);
+        // Optional reputation source; if set it must be a contract (else agent.reputation would revert).
+        if (scoreRegistry_ != address(0) && scoreRegistry_.code.length == 0) revert ZeroScoreRegistry();
+        scoreRegistry = IScoreLookup(scoreRegistry_);
     }
 
     /// @notice A tenant registers their gate/policy for their parent name.
@@ -94,6 +106,11 @@ contract PassportResolver {
         string memory agentRec = _agentRegistrationValue(node, key);
         if (bytes(agentRec).length != 0) return agentRec;
 
+        // agent.reputation[<agentWallet>] -> the agent's reputation score (DEMO: hardcoded in the
+        // ScoreRegistry; production: subgraph / ERC-8004). Gated to agents linked to THIS name.
+        string memory rep = _agentReputationValue(node, key);
+        if (bytes(rep).length != 0) return rep;
+
         return "";
     }
 
@@ -118,6 +135,11 @@ contract PassportResolver {
         return string(abi.encodePacked("agent-registration[", registry7930(), "][", _toHex(agent), "]"));
     }
 
+    /// @notice The text-record key for an agent's reputation score.
+    function agentReputationKey(address agent) public pure returns (string memory) {
+        return string(abi.encodePacked("agent.reputation[", _toHex(agent), "]"));
+    }
+
     /// @dev Returns "1" if `key` is our agent-registration key for an agent linked to `node`'s identity,
     ///      else "" (wrong registry, malformed, unlinked, or unknown identity).
     function _agentRegistrationValue(bytes32 node, string calldata key) internal view returns (string memory) {
@@ -132,6 +154,24 @@ contract PassportResolver {
         address personId = identityOf[node];
         if (personId != address(0) && identityFactory.identityOfWallet(agent) == personId) {
             return "1";
+        }
+        return "";
+    }
+
+    /// @dev Returns the decimal score for an `agent.reputation[<agent>]` key when the agent is linked
+    ///      to `node`'s identity and a score registry is set; else "".
+    function _agentReputationValue(bytes32 node, string calldata key) internal view returns (string memory) {
+        if (address(scoreRegistry) == address(0)) return "";
+        bytes memory kb = bytes(key);
+        bytes memory prefix = "agent.reputation[";
+        if (kb.length != prefix.length + 43) return ""; // prefix + "0x"+40hex (42) + "]" (1)
+        if (kb[kb.length - 1] != "]") return "";
+        if (!_startsWith(kb, prefix)) return "";
+        (address agent, bool ok) = _parseAddrAt(kb, prefix.length);
+        if (!ok) return "";
+        address personId = identityOf[node];
+        if (personId != address(0) && identityFactory.identityOfWallet(agent) == personId) {
+            return _toDecimal(scoreRegistry.scoreOf(agent));
         }
         return "";
     }
@@ -215,5 +255,23 @@ contract PassportResolver {
         if (c >= 97 && c <= 102) return (c - 87, true); // a-f
         if (c >= 65 && c <= 70) return (c - 55, true); // A-F
         return (0, false);
+    }
+
+    function _toDecimal(uint256 v) internal pure returns (string memory) {
+        if (v == 0) return "0";
+        uint256 n = v;
+        uint256 digits;
+        while (n != 0) {
+            digits++;
+            n /= 10;
+        }
+        bytes memory out = new bytes(digits);
+        n = v;
+        while (n != 0) {
+            digits--;
+            out[digits] = bytes1(uint8(48 + (n % 10)));
+            n /= 10;
+        }
+        return string(out);
     }
 }

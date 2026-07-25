@@ -58,7 +58,7 @@ contract PassportSubnameRegistrarTest is Test {
 
     function setUp() public {
         wrapper = new MockNameWrapper();
-        resolver = new PassportResolver(address(new MockLookup())); // factory ref unused by these tests, but must be a contract
+        resolver = new PassportResolver(address(new MockLookup()), address(0)); // factory unused here; no score registry
         registrar = new PassportSubnameRegistrar(address(wrapper), address(resolver), address(this));
         // registrar is the tenant's controller so resolver.setIdentity is authorized
         resolver.setTenant(parentNode, address(0xDEAD), policyId, address(registrar));

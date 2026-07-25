@@ -28,10 +28,20 @@ contract MockFactory {
     }
 }
 
+/// Minimal ScoreRegistry mock: a settable wallet -> score map (matches scoreOf).
+contract MockScore {
+    mapping(address => uint256) public scoreOf;
+
+    function set(address wallet, uint256 s) external {
+        scoreOf[wallet] = s;
+    }
+}
+
 contract PassportResolverTest is Test {
     PassportResolver resolver;
     MockGate gate;
     MockFactory factory;
+    MockScore score;
 
     address controller = address(0xC0FFEE);
     address identity = address(0xBEEF);
@@ -43,11 +53,40 @@ contract PassportResolverTest is Test {
 
     function setUp() public {
         factory = new MockFactory();
-        resolver = new PassportResolver(address(factory));
+        score = new MockScore();
+        resolver = new PassportResolver(address(factory), address(score));
         gate = new MockGate();
         resolver.setTenant(parentNode, address(gate), policyId, controller);
         vm.prank(controller);
         resolver.setIdentity(node, parentNode, identity);
+    }
+
+    // --- agent reputation (agent.reputation[<agent>], from ScoreRegistry) ---
+
+    function test_reputation_returns_score_when_linked() public {
+        factory.link(agent, identity);
+        score.set(agent, 87);
+        assertEq(resolver.text(node, resolver.agentReputationKey(agent)), "87");
+    }
+
+    function test_reputation_returns_zero_when_linked_no_score() public {
+        factory.link(agent, identity);
+        assertEq(resolver.text(node, resolver.agentReputationKey(agent)), "0");
+    }
+
+    function test_reputation_empty_when_not_linked() public {
+        score.set(agent, 87); // score set, but agent not linked to this name
+        assertEq(resolver.text(node, resolver.agentReputationKey(agent)), "");
+    }
+
+    function test_reputation_empty_when_no_registry() public {
+        // a resolver deployed without a score registry disables the record
+        PassportResolver noScore = new PassportResolver(address(factory), address(0));
+        noScore.setTenant(parentNode, address(gate), policyId, controller);
+        vm.prank(controller);
+        noScore.setIdentity(node, parentNode, identity);
+        factory.link(agent, identity);
+        assertEq(noScore.text(node, noScore.agentReputationKey(agent)), "");
     }
 
     // --- ENSIP-25: agent-registration computed live ---
