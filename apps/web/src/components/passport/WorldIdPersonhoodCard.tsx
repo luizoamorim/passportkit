@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { IDKitRequestWidget, proofOfHuman, type IDKitResult, type RpContext } from '@worldcoin/idkit';
-import { createWalletClient, custom, parseAbi, type Address } from 'viem';
-import { sepolia } from 'viem/chains';
+import { parseAbi, type Address } from 'viem';
+import { useAccount, useSwitchChain, useWalletClient } from 'wagmi';
 import { ClaimStatusBadge } from './ClaimStatusBadge';
+import { activeChain } from '@/lib/wagmi';
 import { requestWorldId, verifyWorldId, type WorldRequest } from '@/modules/passport/world-id.service';
 
 type Status = 'idle' | 'preparing' | 'verifying' | 'verified' | 'error';
@@ -26,23 +27,32 @@ export function WorldIdPersonhoodCard({ wallet, identity, status: initialStatus,
   const [request, setRequest] = useState<WorldRequest | null>(null);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
 
   const start = async () => {
     if (!identity) { setStatus('error'); setMessage('Your identity is still being created. Please try again.'); return; }
     setStatus('preparing'); setMessage(null);
     try {
       const next = await requestWorldId();
-      setRequest(next); setOpen(true);
+      // Back to idle once the sheet is open: otherwise closing it leaves the
+      // button disabled on "Preparing…" with no way to retry.
+      setRequest(next); setOpen(true); setStatus('idle');
     } catch (error) {
       setStatus('error'); setMessage(error instanceof Error ? error.message : 'Could not prepare World ID.');
     }
   };
 
+  // Signs through whichever wallet is connected — injected, WalletConnect or Coinbase.
   const submitClaim = async (claim: { topic: string; issuer: `0x${string}`; signature: `0x${string}`; data: `0x${string}` }) => {
-    if (!window.ethereum) throw new Error('Connect MetaMask to submit your own onchain claim.');
-    const client = createWalletClient({ chain: sepolia, transport: custom(window.ethereum) });
-    return client.writeContract({
+    if (!walletClient) throw new Error('Connect a wallet to submit your own onchain claim.');
+    if (chainId !== activeChain.id) {
+      await switchChainAsync({ chainId: activeChain.id });
+    }
+    return walletClient.writeContract({
       account: wallet as Address,
+      chain: activeChain,
       address: identity as Address,
       abi: IDENTITY_ABI,
       functionName: 'submitClaim',
@@ -51,15 +61,21 @@ export function WorldIdPersonhoodCard({ wallet, identity, status: initialStatus,
   };
 
   const handleVerify = async (result: IDKitResult) => {
-    setStatus('verifying');
-    const verified = await verifyWorldId(wallet, identity!, result as unknown as Record<string, unknown>);
-    if (verified.mode === 'onchain') {
-      const hash = await submitClaim(verified.claim);
-      setStatus('verified'); setMessage('World ID verified. Your wallet submitted the PROOF_OF_PERSONHOOD claim.');
-      await onComplete('Claim submitted from your wallet.', hash);
-    } else {
-      setStatus('verified'); setMessage(verified.message);
-      await onComplete(verified.message);
+    setStatus('verifying'); setMessage(null);
+    try {
+      const verified = await verifyWorldId(wallet, identity!, result as unknown as Record<string, unknown>);
+      if (verified.mode === 'onchain') {
+        const hash = await submitClaim(verified.claim);
+        setStatus('verified'); setMessage('World ID verified. Your wallet submitted the PROOF_OF_PERSONHOOD claim.');
+        await onComplete('Claim submitted from your wallet.', hash);
+      } else {
+        setStatus('verified'); setMessage(verified.message);
+        await onComplete(verified.message);
+      }
+    } catch (error) {
+      // A rejected signature or a failing backend must not leave the card stuck on "Verifying".
+      setStatus('error');
+      setMessage(error instanceof Error ? error.message : 'Could not complete verification.');
     }
   };
 
