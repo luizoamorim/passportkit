@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-25 — Uniswap v4 hook + House Concierge Agent
+
+- **Uniswap v4 `ComplianceHook` + local demo** (PR #1) — the AccessGate that guards the
+  Deal Room now also guards a v4 pool: `beforeSwap` / `beforeAddLiquidity` revert
+  `NotCompliant(wallet, reasonCode)`, exit is deliberately ungated. Self-contained demo
+  app (`apps/hook-demo`, `make hook-demo` → :4180) with self-healing anvil boot, two
+  pools showing policy separation, and a built-in tx inspector.
+- **Caller-bound `DemoPositionRouter` fix** — the demo liquidity router now binds
+  positions to the calling actor instead of the router address, so per-actor LP
+  positions read back correctly (and the hook sees the real provider).
+- **House Concierge Agent** — new agents layer: `HouseToken` (CASA scrip),
+  `HouseTreasury` (owners, m-of-n approvals, agent mandate, payment queue,
+  `isAgentInGoodStanding`) and `MandateHook` (gates the CASA/mUSD pool). Two spending
+  rails — autonomous below the per-tx cap (exact-output swap CASA→mUSD through the
+  gated pool, then settle the vendor's **x402** invoice: 402 → pay → retry with
+  `X-PAYMENT`), owner-approved above it — both gated on the owners' live passports, so
+  revoking one owner's KYC kills the agent on both rails in the same block. Mock x402
+  vendor server included; decision engine is a **0G-ready adapter**
+  (`DECIDER=mock|openai|zerog`) whose TEE attestation replaces the local decision hash
+  at event time. Runtime + UI in `apps/concierge` (`make concierge-demo` → :4190).
+- **Tests:** 29 new Solidity tests (HouseToken 4, HouseTreasury 18, MandateHook 7 —
+  93 green in `contracts/`) and 28 new JS tests (`apps/concierge`: decider rules, x402
+  client, evidence hashing, revert decoding).
+
+---
+
 ## Baseline (prior work — NOT judged as new)
 - **Project:** PassportCreds by Node — our ETHGlobal build (claim registry, soulbound passport, access gate, Deal Room).
 - **Repo / commit:** `[baseline repo URL]` @ `[baseline commit hash]` — imported in the initial commit, labeled `pre-existing baseline`.
