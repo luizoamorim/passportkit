@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compliance Officer — PassportKit</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233DDBD9'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>CO</text></svg>">
+<style>
+  :root {
+    --bg: #F0F2F6; --card: #FFFFFF; --border: #DDE1EA;
+    --ink: #0D1428; --body: #4B5568; --muted: #9CA3AF;
+    --cyan: #4A9EFF; --teal: #3DDBD9;
+    --green: #16A34A; --green-bg: #DCFCE7;
+    --amber: #CA8A04; --amber-bg: #FEF9C3;
+    --red: #DC2626; --red-bg: #FEE2E2;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 'Inter', ui-sans-serif, system-ui, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+  nav { background: var(--card); border-bottom: 1px solid var(--border); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  .logo-sq { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(90deg, var(--cyan), var(--teal)); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 12px; }
+  .logo span { color: var(--muted); font-size: 12.5px; font-weight: 500; }
+  .navlinks a { color: var(--body); font-size: 12.5px; text-decoration: none; margin-left: 14px; }
+  .navlinks a:hover { color: var(--ink); }
+  .srcchip { font: 600 11px var(--mono); border-radius: 999px; padding: 5px 11px; }
+  .srcchip.live { color: var(--green); background: var(--green-bg); }
+  .srcchip.off { color: var(--red); background: var(--red-bg); }
+
+  main { padding: 28px 0 60px; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); margin: 0 0 4px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h1 .grad { background: linear-gradient(90deg, var(--cyan), var(--teal)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .sub { color: var(--body); max-width: 78ch; margin: 0 0 20px; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 10px; }
+  .askrow { display: flex; gap: 10px; }
+  .askrow input { flex: 1; border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; font: 13.5px 'Inter', sans-serif; color: var(--ink); background: var(--bg); }
+  .askrow input:focus { outline: 2px solid var(--cyan); outline-offset: -1px; background: #fff; }
+  button { border: 0; border-radius: 10px; padding: 11px 18px; font: 600 13px 'Inter', sans-serif; cursor: pointer; }
+  .primary { background: linear-gradient(90deg, var(--cyan), var(--teal)); color: #fff; }
+  .primary:disabled { opacity: .55; cursor: wait; }
+  .ghost { background: transparent; color: var(--body); border: 1px dashed var(--border); font-weight: 500; }
+  .ghost:hover { color: var(--ink); border-color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font: 500 11.5px var(--mono); color: var(--body); cursor: pointer; }
+  .chip:hover { color: var(--ink); border-color: var(--cyan); }
+  .fallbackrow { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .fallbackrow p { margin: 0; font-size: 11.5px; color: var(--muted); }
+
+  .banner { border-radius: 10px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 16px; }
+  .banner.live { background: var(--green-bg); color: var(--green); }
+  .banner.warn { background: var(--amber-bg); color: var(--amber); }
+  .banner code { font: 11.5px var(--mono); }
+
+  .answer { display: none; }
+  .anshead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .badge { font: 600 10.5px var(--mono); letter-spacing: .06em; border-radius: 999px; padding: 4px 10px; }
+  .badge.live { color: var(--green); background: var(--green-bg); }
+  .badge.sim { color: var(--amber); background: var(--amber-bg); }
+  .badge.err { color: var(--red); background: var(--red-bg); }
+  .lat { font: 500 11px var(--mono); color: var(--muted); }
+  .interp { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+  .summary { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
+  .lines { display: grid; gap: 6px; margin: 0 0 6px; }
+  .line { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font: 12px var(--mono); color: var(--body); overflow-x: auto; white-space: nowrap; }
+  .empty { color: var(--muted); font-size: 12.5px; }
+
+  details { border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }
+  details summary { cursor: pointer; padding: 10px 14px; font: 600 12px 'Inter', sans-serif; color: var(--body); }
+  details[open] summary { border-bottom: 1px solid var(--border); }
+  details .inner { padding: 12px 14px; }
+  pre { background: #0D1428; color: #D7DDEB; border-radius: 8px; padding: 12px 14px; font: 11.5px/1.5 var(--mono); overflow-x: auto; margin: 8px 0; }
+  .kv { font: 11.5px var(--mono); color: var(--body); margin: 4px 0; }
+  .kv b { color: var(--ink); }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <div class="logo"><div class="logo-sq">CO</div>Compliance Officer <span>· PassportKit × The Graph</span></div>
+    <div class="navlinks">
+      <span id="srcchip" class="srcchip off">SUBGRAPH: —</span>
+      <a href="/">← concierge demo</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="eyebrow">The Graph · Live Subgraph · Ethereum Sepolia</p>
+  <h1>Ask the <span class="grad">compliance officer</span></h1>
+  <p class="sub">
+    An agent that reasons over the PassportKit subgraph — claim lifecycle, revocation latches,
+    agent links, gated transfers and the indexed history of every <code>isEligible</code> answer.
+    Each reply shows the exact GraphQL query it ran and the rows it used. No query, no claim.
+  </p>
+
+  <div id="banner" class="banner warn">Checking subgraph configuration…</div>
+
+  <div class="card">
+    <h2>Question</h2>
+    <div class="askrow">
+      <input id="q" placeholder="e.g. Which passports expire in the next 30 days?" autofocus>
+      <button id="ask" class="primary">Ask (live)</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="fallbackrow">
+      <button id="simulate" class="ghost">Simulate (recorded fixture)</button>
+      <p>Presentation fallback only — replays a recorded response if the network dies. The judged flow is the live gateway.</p>
+    </div>
+  </div>
+
+  <div class="card answer" id="answer">
+    <div class="anshead">
+      <span id="badge" class="badge live">LIVE</span>
+      <span id="lat" class="lat"></span>
+    </div>
+    <p class="interp" id="interp"></p>
+    <p class="summary" id="summary"></p>
+    <div class="lines" id="lines"></div>
+    <div id="citations"></div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const SAMPLES = [
+  'Which passports expire in the next 30 days?',
+  'What is the blast radius if issuer 0x0000000000000000000000000000000000000000 is revoked?',
+  'Full audit trail for wallet 0x0000000000000000000000000000000000000000',
+];
+
+let live = false;
+
+async function loadConfig() {
+  try {
+    const cfg = await (await fetch('/api/officer/config')).json();
+    live = cfg.live;
+    const chip = $('srcchip');
+    chip.textContent = live ? 'SUBGRAPH: LIVE' : 'SUBGRAPH: NOT SET';
+    chip.className = 'srcchip ' + (live ? 'live' : 'off');
+    const banner = $('banner');
+    if (live) {
+      banner.className = 'banner live';
+      banner.innerHTML = 'Live subgraph: <code>' + esc(cfg.url) + '</code> — every Ask hits the Graph gateway.';
+    } else {
+      banner.className = 'banner warn';
+      banner.innerHTML = 'No <code>SUBGRAPH_URL</code> configured — Ask (live) is disabled. ' +
+        'Set it in <code>apps/concierge/.env</code> (Studio dev URL or gateway URL + <code>GRAPH_API_KEY</code>).';
+    }
+    $('ask').disabled = !live;
+  } catch { /* server not up yet */ }
+}
+
+function chipRow() {
+  $('chips').innerHTML = SAMPLES.map((s) => '<span class="chip">' + esc(s) + '</span>').join('');
+  for (const el of document.querySelectorAll('.chip')) {
+    el.onclick = () => { $('q').value = el.textContent; $('q').focus(); };
+  }
+}
+
+function render(r, simulated) {
+  const box = $('answer');
+  box.style.display = 'block';
+  const badge = $('badge');
+  if (!r.ok) {
+    badge.className = 'badge err';
+    badge.textContent = r.reason ?? 'ERROR';
+    $('lat').textContent = '';
+    $('interp').textContent = '';
+    $('summary').textContent = r.message ?? 'The officer could not answer.';
+    $('lines').innerHTML = (r.supported ?? []).map((s) => '<div class="line">' + esc(s) + '</div>').join('');
+    $('citations').innerHTML = '';
+    return;
+  }
+  badge.className = 'badge ' + (simulated ? 'sim' : 'live');
+  badge.textContent = simulated ? 'SIMULATED — recorded fixture, not live data' : 'LIVE — Graph gateway';
+  $('lat').textContent = r.source.url + ' · ' + r.source.latencyMs + ' ms';
+  $('interp').textContent = 'Interpreted as: ' + r.interpretation;
+  $('summary').textContent = r.summary;
+  $('lines').innerHTML = r.answer.length
+    ? r.answer.map((l) => '<div class="line">' + esc(l) + '</div>').join('')
+    : '<p class="empty">No matching rows.</p>';
+  $('citations').innerHTML = r.citations.map((c) => `
+    <details open>
+      <summary>Citation: ${esc(c.label)} — ${c.rows} row(s) from ${simulated ? 'recorded fixture' : 'the live gateway'}</summary>
+      <div class="inner">
+        <div class="kv"><b>variables</b> ${esc(JSON.stringify(c.variables))}</div>
+        <pre>${esc(c.query)}</pre>
+        <details>
+          <summary>raw rows (as returned)</summary>
+          <div class="inner"><pre>${esc(JSON.stringify(c.data, null, 2))}</pre></div>
+        </details>
+      </div>
+    </details>`).join('');
+}
+
+async function ask(simulate) {
+  const question = $('q').value.trim();
+  if (!question) return $('q').focus();
+  const btn = simulate ? $('simulate') : $('ask');
+  btn.disabled = true;
+  try {
+    const r = await (await fetch('/api/officer/ask', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question, simulate }),
+    })).json();
+    render(r, simulate);
+  } catch (err) {
+    render({ ok: false, reason: 'NETWORK', message: String(err) }, simulate);
+  } finally {
+    btn.disabled = simulate ? false : !live;
+  }
+}
+
+$('ask').onclick = () => ask(false);
+$('simulate').onclick = () => ask(true);
+// Enter = the live path, always. The recorded fallback stays behind its own labeled button.
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(false); });
+chipRow();
+loadConfig();
+</script>
+</body>
+</html>
