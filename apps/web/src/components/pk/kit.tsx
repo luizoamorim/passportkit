@@ -11,6 +11,7 @@ export function short(addr?: string | null) {
 }
 
 const NAV = [
+  { href: '/live', label: 'Live ⚡' },
   { href: '/passport', label: 'My Passport' },
   { href: '/deal-room', label: 'Deal Room' },
   { href: '/agents', label: 'My Agents' },
