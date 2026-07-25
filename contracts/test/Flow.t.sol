@@ -59,7 +59,7 @@ contract FlowTest is Test {
 
         // 3) the HOLDER submits their own signed claim (Model B)
         vm.prank(user);
-        Identity(id).submitClaim(kyc, address(issuer), sig, data, exp);
+        Identity(id).submitClaim(kyc, address(issuer), sig, data);
 
         // ✅ eligible
         (bool ok,) = gate.isEligible(id, POLICY);
