@@ -341,6 +341,24 @@ make up
 make test-green
 ```
 
+### One demo world
+
+Every onchain demo — both gated Uniswap v4 pools and the House Concierge — lives in a
+single chain world: one PassportKit stack, one v4 PoolManager, three pools. One script
+deploys all of it:
+
+```bash
+anvil --silent &
+cd contracts && forge script script/DeployAll.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+```
+
+It writes every address to `apps/web/demo-addresses.json`, the single file the site reads.
+
+Starting state: **operator** (KYC + accredited, admin, issuer signer, LP), **ana** (KYC,
+house co-owner), **rui** (identity, no claims — verified live in the demo), **concierge**
+and **plumber** (no identity at all). The house holds 50,000 mUSD and has granted the
+concierge a mandate of 200 CASA per transaction, funded with 500 CASA.
+
 ---
 
 ## Documentation
