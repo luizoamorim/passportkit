@@ -2,11 +2,11 @@
 
 type Props = {
   address: string;
-  walletProvider: 'privy' | 'metamask';
+  walletProvider: 'privy' | 'wallet';
 };
 
 export function WalletSetupCard({ address, walletProvider }: Props) {
-  const label = walletProvider === 'privy' ? 'Privy Embedded Wallet' : 'MetaMask';
+  const label = walletProvider === 'privy' ? 'Privy Embedded Wallet' : 'External Wallet';
   const badge = walletProvider === 'privy' ? 'bg-blue-50 text-[#4A9EFF]' : 'bg-orange-50 text-orange-500';
 
   return (

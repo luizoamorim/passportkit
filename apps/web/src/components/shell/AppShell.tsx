@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
-import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
+import { ConnectMenu } from '@/components/connect/ConnectMenu';
 import { PrivyLoginButton } from '@/components/wallet/PrivyLoginButton';
 import { PRODUCT_NAME } from '@/modules/passport/passport.constants';
 
@@ -26,7 +26,7 @@ const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 /// The world read is a lot of RPC round trips; local anvil, so 15s is plenty.
 const WORLD_POLL_MS = 15_000;
 
-export type WalletKind = 'privy' | 'metamask';
+export type WalletKind = 'privy' | 'wallet';
 
 type WalletState = {
   address: string | null;
@@ -56,19 +56,21 @@ export function useWallet(): WalletState {
 /**
  * The connect control, wired to the shell's wallet state.
  *
- * Privy and MetaMask are mutually exclusive here, exactly as the pages had it
- * before the shell existed: with `NEXT_PUBLIC_PRIVY_APP_ID` set the embedded
- * wallet is the only path (`ConnectWalletButton` would auto-connect an injected
- * account on mount and race it), without it MetaMask is.
+ * Privy and external wallets are mutually exclusive here, exactly as the pages
+ * had it before the shell existed: with `NEXT_PUBLIC_PRIVY_APP_ID` set the
+ * embedded wallet is the only path, without it `ConnectMenu` lists every wagmi
+ * connector (browser extensions via EIP-6963, WalletConnect, Coinbase Wallet).
  *
  * Pages render this inside their own empty states; the shell renders it in the
- * header. Both read and write the same address.
+ * header. Both read and write the same address. wagmi owns reconnect-on-reload
+ * and makes disconnect stick (its `disconnect()` clears the stored connection),
+ * so the old unmount-to-disconnect workaround for `eth_accounts` is gone.
  */
 export function WalletConnectControl() {
-  const { address, provider, connect, disconnect, disconnected, resume } = useWallet();
+  const { address, provider, connect, disconnect } = useWallet();
 
   const onPrivy = useCallback((addr: string) => connect(addr, 'privy'), [connect]);
-  const onMetaMask = useCallback((addr: string) => connect(addr, 'metamask'), [connect]);
+  const onWallet = useCallback((addr: string) => connect(addr, 'wallet'), [connect]);
 
   if (HAS_PRIVY) {
     // Privy's own logout flips `authenticated`, so disconnect sticks by itself.
@@ -81,27 +83,11 @@ export function WalletConnectControl() {
     );
   }
 
-  // Disconnecting does not un-authorize the site in MetaMask, and
-  // `ConnectWalletButton` adopts an authorized account in a mount effect. Left
-  // mounted it would read the account straight back out of `eth_accounts` and
-  // undo the disconnect — which is why this used to be papered over by
-  // redirecting to `/`. Keep it UNMOUNTED instead: mounting it is the reconnect.
-  if (disconnected) {
-    return (
-      <button
-        onClick={resume}
-        className="bg-[#0D1428] text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-[#141E38] transition-colors"
-      >
-        Connect Wallet
-      </button>
-    );
-  }
-
   return (
-    <ConnectWalletButton
-      onConnect={onMetaMask}
+    <ConnectMenu
+      onConnect={onWallet}
       onDisconnect={disconnect}
-      address={provider === 'metamask' ? address : null}
+      address={provider === 'wallet' ? address : null}
     />
   );
 }

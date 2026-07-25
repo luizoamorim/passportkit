@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWallet, WalletConnectControl } from '@/components/shell/AppShell';
 import { ComplianceProgressStepper } from '@/components/passport/ComplianceProgressStepper';
+import { WorldIdChecksSection } from '@/components/passport/WorldIdChecksSection';
 import { EvidenceCard } from '@/components/passport/EvidenceCard';
 import { PassportCard } from '@/components/passport/PassportCard';
 import { CompliancePassportNFTCard } from '@/components/passport/CompliancePassportNFTCard';
@@ -241,6 +242,9 @@ export default function PassportPage() {
                 accreditedStatus={accreditedClaim?.status}
               />
             </div>
+
+            {/* World ID: personhood + selfie check (beta) + identity check (preview) */}
+            <WorldIdChecksSection wallet={walletAddress} />
 
             {/* Three-column layout: evidence | passport | wallet */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

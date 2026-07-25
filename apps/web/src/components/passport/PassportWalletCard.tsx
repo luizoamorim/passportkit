@@ -4,7 +4,7 @@ import type { WalletPolicy } from '@/modules/wallet/wallet.service';
 
 type Props = {
   walletAddress: string;
-  walletProvider: 'privy' | 'metamask';
+  walletProvider: 'privy' | 'wallet';
   passportStatus: string;
   policy: WalletPolicy | null;
 };
@@ -16,7 +16,7 @@ const POLICY_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export function PassportWalletCard({ walletAddress, walletProvider, passportStatus, policy }: Props) {
-  const providerLabel = walletProvider === 'privy' ? 'Privy Embedded Wallet' : 'MetaMask';
+  const providerLabel = walletProvider === 'privy' ? 'Privy Embedded Wallet' : 'External Wallet';
   const providerBadge = walletProvider === 'privy' ? 'bg-blue-50 text-[#4A9EFF]' : 'bg-orange-50 text-orange-500';
   const policyInfo = policy ? POLICY_LABELS[policy.policyStatus] : null;
 
