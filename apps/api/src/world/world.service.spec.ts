@@ -57,4 +57,35 @@ describe('WorldService (v4)', () => {
     expect(() => service.buildRequest('document')).toThrow('not configured');
     expect(() => service.verifyResult('document', V4_RESULT)).toThrow('not configured');
   });
+
+  describe('strict per-kind credential validation (configured, no DEMO_MODE)', () => {
+    function configured() {
+      process.env.WORLD_APP_ID = 'app_test';
+      process.env.WORLD_RP_ID = 'rp_test';
+      process.env.WORLD_RP_SIGNING_KEY = '0x' + '1'.repeat(64);
+      return new WorldService();
+    }
+
+    it("rejects a 'face' proof for the document flow (Selfie Check can't pass as KYC)", () => {
+      const service = configured();
+      const faceResult = { responses: [{ identifier: 'face', nullifier: '0xf' }] };
+      expect(() => service.verifyResult('document', faceResult)).toThrow('required credential');
+    });
+
+    it('accepts the document flow when identity_attested is true (Identity Check)', () => {
+      const service = configured();
+      const idCheck = { identity_attested: true, responses: [{ identifier: 'passport', nullifier: '0xp' }] };
+      const r = service.verifyResult('document', idCheck);
+      expect(r.ok).toBe(true);
+      expect(r.mock).toBe(false);
+      expect(r.nullifierHash).toBe('0xp');
+    });
+
+    it("accepts a 'face' proof for the selfie flow (Selfie Check)", () => {
+      const service = configured();
+      const r = service.verifyResult('selfie', { responses: [{ identifier: 'face', nullifier: '0xf' }] });
+      expect(r.ok).toBe(true);
+      expect(r.credential).toBe('face');
+    });
+  });
 });

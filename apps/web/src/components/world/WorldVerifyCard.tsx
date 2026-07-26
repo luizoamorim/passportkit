@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { IDKitRequestWidget, selfieCheckLegacy, passport } from '@worldcoin/idkit';
+import { useEffect, useState } from 'react';
+import { IDKitRequestWidget, selfieCheckLegacy, identityCheck } from '@worldcoin/idkit';
 import type { Address } from 'viem';
 import {
   requestWorldProof,
@@ -9,7 +9,13 @@ import {
   type WorldKind,
   type WorldRequestConfig,
 } from '@/lib/world-api';
-import { submitClaim } from '@/lib/world-chain';
+import { submitClaim, getClaimValid, TOPICS } from '@/lib/world-chain';
+
+/** World environment — 'sandbox'/'staging' to test with the sandbox World App, 'production' for live. */
+const WORLD_ENV = (process.env.NEXT_PUBLIC_WORLD_ENV ?? 'production') as
+  | 'production'
+  | 'staging'
+  | 'sandbox';
 
 type Phase = 'idle' | 'requesting' | 'widget' | 'verifying' | 'submitting' | 'done' | 'error';
 
@@ -21,9 +27,14 @@ interface FlowState {
 }
 
 const FLOWS: { kind: WorldKind; title: string; sub: string; emoji: string; topic: string }[] = [
-  { kind: 'selfie', title: 'Self Check', sub: 'Face verification (low friction)', emoji: '🙂', topic: 'Proof of Personhood' },
-  { kind: 'document', title: 'ID Verification', sub: 'Passport / document', emoji: '🪪', topic: 'KYC Verified' },
+  { kind: 'selfie', title: 'Selfie Check', sub: 'Live person, no Orb', emoji: '🤳', topic: 'Proof of Personhood' },
+  { kind: 'document', title: 'Identity Check', sub: 'Document-backed age (18+)', emoji: '🪪', topic: 'KYC Verified' },
 ];
+
+const TOPIC_FOR_KIND: Record<WorldKind, bigint> = {
+  selfie: TOPICS.PROOF_OF_PERSONHOOD,
+  document: TOPICS.KYC_VERIFIED,
+};
 
 /** DEMO_MODE mock result so the flow runs end-to-end before World keys are wired. */
 function mockResult(kind: WorldKind) {
@@ -54,6 +65,26 @@ export function WorldVerifyCard({
   function set(kind: WorldKind, patch: Partial<FlowState>) {
     setFlows((prev) => ({ ...prev, [kind]: { ...prev[kind], ...patch } }));
   }
+
+  // Reflect real on-chain state: if a valid claim already exists for a topic, show it as done. This
+  // makes both proofs persist across reloads and survive independently (no reset when doing the other).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [personhood, kyc] = await Promise.all([
+        getClaimValid(identity, TOPIC_FOR_KIND.selfie).catch(() => false),
+        getClaimValid(identity, TOPIC_FOR_KIND.document).catch(() => false),
+      ]);
+      if (cancelled) return;
+      setFlows((prev) => ({
+        selfie: personhood && prev.selfie.phase === 'idle' ? { phase: 'done' } : prev.selfie,
+        document: kyc && prev.document.phase === 'idle' ? { phase: 'done' } : prev.document,
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [identity]);
 
   // result -> backend verify (signs claim) -> user submits to their own Identity (Model B).
   async function completeWith(kind: WorldKind, result: unknown) {
@@ -161,8 +192,13 @@ export function WorldVerifyCard({
                   app_id={state.config.app_id as `app_${string}`}
                   action={state.config.action}
                   rp_context={state.config.rp_context}
+                  environment={WORLD_ENV}
                   allow_legacy_proofs
-                  preset={kind === 'selfie' ? selfieCheckLegacy() : passport()}
+                  preset={
+                    kind === 'selfie'
+                      ? selfieCheckLegacy()
+                      : identityCheck({ attributes: [{ type: 'minimum_age', value: 18 }] })
+                  }
                   onSuccess={(result) => completeWith(kind, result)}
                   onError={() =>
                     set(kind, { phase: 'error', error: 'World App rejected or cancelled the request' })

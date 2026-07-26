@@ -36,6 +36,8 @@ interface WorldResponseItem {
 /** The IDKitResult the widget hands back. A cryptographic proof — NEVER PII. */
 export interface WorldResult {
   responses?: WorldResponseItem[];
+  /** True on Identity Check results — the requested document-backed attributes were attested. */
+  identity_attested?: boolean;
 }
 
 export interface WorldVerifyResult {
@@ -45,9 +47,15 @@ export interface WorldVerifyResult {
   mock: boolean; // true when accepted via the DEMO_MODE fallback
 }
 
-/** Credentials we accept per flow (v4 identifiers). Lenient: any match is enough. */
+/**
+ * Credentials each flow accepts (v4 identifiers). STRICT: the flow only completes if the proof carries
+ * the right kind of credential, so a Selfie Check can't be passed off as a document/KYC proof.
+ *   selfie   -> Selfie Check (a live-person face credential; World returns "face").
+ *   document -> Identity Check (document-backed attribute attestation; identity_attested === true, and
+ *               the underlying credential is a document family: passport / mnc / eid).
+ */
 const EXPECTED_CREDENTIALS: Record<WorldKind, string[]> = {
-  selfie: ['selfie', 'proof_of_human'],
+  selfie: ['face', 'selfie', 'proof_of_human'],
   document: ['passport', 'mnc', 'eid', 'secure_document', 'document'],
 };
 
@@ -148,14 +156,19 @@ export class WorldService {
 
     const expected = EXPECTED_CREDENTIALS[kind];
     const match = responses.find((r) => r.identifier && expected.includes(r.identifier));
-    const chosen = match ?? responses[0];
-    if (!match) {
-      this.logger.warn(
-        `World verifyResult kind=${kind}: no expected credential (${expected.join('|')}); ` +
-          `got ${responses.map((r) => r.identifier).join(',')}`,
+    // Identity Check (document flow) attests document-backed attributes -> identity_attested is the
+    // authoritative success signal even if the underlying credential identifier varies.
+    const attested = kind === 'document' && result?.identity_attested === true;
+
+    if (!match && !attested) {
+      const got = responses.map((r) => r.identifier).join(',') || 'none';
+      throw new Error(
+        `World proof for '${kind}' did not carry the required credential ` +
+          `(expected ${expected.join('|')}${kind === 'document' ? ' or identity_attested' : ''}; got ${got})`,
       );
     }
 
+    const chosen = match ?? responses[0];
     const nullifier = this.extractNullifier([chosen]);
     if (!nullifier) throw new Error('World result missing nullifier');
 
