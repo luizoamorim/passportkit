@@ -121,6 +121,17 @@ Tester: the app owner's wallet on Sepolia, real World App on iOS, `production`.
   via NFC). A user who only has a face credential gets no document proof; our strict backend then
   correctly refuses (rather than silently accepting a face proof as KYC). Honest, but it means the
   document flow has a real prerequisite that should be signposted **before** the user starts.
+- **Region / document coverage blocked us (HIGH — real tester finding):** our tester tried to enroll a
+  **Brazilian passport** in the World App to obtain a document credential and could not — so
+  **Identity Check could not be completed at all** for this user, and we could not exercise the ID
+  bounty end-to-end with a real document. This is the single biggest blocker we hit: document
+  verification coverage is uneven by country, and there is no in-app signal *before* you start telling
+  a user from an unsupported region that Identity Check will not work for them. **Suggestions:** (a)
+  surface supported document types / countries up front (and in the IDKit error) so the app can fall
+  back gracefully; (b) expand document coverage (Brazil); (c) a test/sandbox document credential so
+  developers outside supported regions can still build and test the Identity Check flow. Because of
+  this we ship Identity Check as a labeled, code-complete path and use **Selfie Check** as the demo's
+  real verification (available to our tester).
 
 ### 3.3 Cross-device clarity (SUGGESTION)
 "You will be redirected to the app, please return to this page once you're done" is fine on mobile but
@@ -147,9 +158,12 @@ minimum attribute, testers reported trust in the flow. No sensitive data is ever
 6. **Gotcha:** set an explicit `gas` on the submit tx — an EIP-7702 delegated wallet made viem fall back
    to a ~21M gas limit that exceeded the RPC provider cap (Infura ~16.77M).
 
-## 5. Summary of actionable World feedback (top 5)
-1. Ship (or clearly label) a **v4 simulator**; fix the portal "test build" dead-link. *(unblocks dev loop)*
-2. Make the desktop widget show a **QR by default** / add a force-cross-device prop. *(looks broken otherwise)*
-3. A **classic-vs-v4** migration banner + a **Managed backend** copy-paste example.
-4. Document the returned **`face`** identifier and the **`environment`** matrix.
-5. Surface **`identity_attested`** and Identity Check attribute semantics in prose, not just types.
+## 5. Summary of actionable World feedback (top 6)
+1. **Document coverage / region:** support **Brazilian passports** (our tester could not enroll one, which
+   blocked Identity Check entirely) and surface supported countries/documents up front + in the IDKit
+   error, plus a **test document credential** so devs in unsupported regions can build the flow. *(our #1 blocker)*
+2. Ship (or clearly label) a **v4 simulator**; fix the portal "test build" dead-link. *(unblocks dev loop)*
+3. Make the desktop widget show a **QR by default** / add a force-cross-device prop. *(looks broken otherwise)*
+4. A **classic-vs-v4** migration banner + a **Managed backend** copy-paste example.
+5. Document the returned **`face`** identifier and the **`environment`** matrix.
+6. Surface **`identity_attested`** and Identity Check attribute semantics in prose, not just types.
