@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWallet, WalletConnectControl } from '@/components/shell/AppShell';
 import { ComplianceProgressStepper } from '@/components/passport/ComplianceProgressStepper';
+import { WorldIdChecksSection } from '@/components/passport/WorldIdChecksSection';
 import { EvidenceCard } from '@/components/passport/EvidenceCard';
 import { PassportCard } from '@/components/passport/PassportCard';
 import { CompliancePassportNFTCard } from '@/components/passport/CompliancePassportNFTCard';
@@ -229,6 +230,12 @@ export default function PassportPage() {
             </button>
           </div>
         )}
+
+        {/* World ID: personhood + selfie check (beta) + identity check (preview).
+            Deliberately outside the passport-state gate: the World ID row only needs
+            the eligibility/world-id endpoints, so a failing legacy passport read must
+            not take the QR flow down with it. */}
+        {walletAddress && !loading && <WorldIdChecksSection wallet={walletAddress} />}
 
         {walletAddress && passport && !loading && (
           <>

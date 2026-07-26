@@ -16,6 +16,9 @@ library ClaimTopics {
     uint256 internal constant KYC_VERIFIED        = uint256(keccak256("KYC_VERIFIED"));
     uint256 internal constant PROOF_OF_PERSONHOOD = uint256(keccak256("PROOF_OF_PERSONHOOD"));
     uint256 internal constant ACCREDITED_INVESTOR = uint256(keccak256("ACCREDITED_INVESTOR"));
+    // World ID beta checks (Selfie Check id 11, Identity Check preview).
+    uint256 internal constant SELFIE_VERIFIED     = uint256(keccak256("SELFIE_VERIFIED"));
+    uint256 internal constant IDENTITY_ATTESTED   = uint256(keccak256("IDENTITY_ATTESTED"));
 }
 
 /// Reason codes returned by EligibilityGate (bytes32 so they're cheap + surfaced in reverts/UI).

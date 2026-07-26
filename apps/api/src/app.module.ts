@@ -11,6 +11,8 @@ import { WalletsModule } from './wallets/wallets.module';
 import { IssuerModule } from './issuer/issuer.module';
 import { EligibilityModule } from './eligibility/eligibility.module';
 import { IdentityModule } from './identity/identity.module';
+import { DemoModule } from './demo/demo.module';
+import { WorldIdModule } from './world-id/world-id.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { IdentityModule } from './identity/identity.module';
     IssuerModule,
     EligibilityModule,
     IdentityModule,
+    DemoModule,
+    WorldIdModule,
   ],
 })
 export class AppModule {}
