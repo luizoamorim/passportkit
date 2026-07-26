@@ -6,6 +6,6 @@
 
 Order: `01-contracts` → `02-backend` → `03-frontend`.
 
-- `01-contracts.md` — the 9 Solidity contracts + `ComplianceHook.t.sol`.
+- `01-contracts.md` — the identity + gate + surface contracts (Identity, IdentityFactory, ClaimIssuer, IssuerRegistry, EligibilityGate, GatedERC20, ENS resolver + registrar) and their Foundry tests. The repo now holds **14 deployable contracts / 15 `.sol` files** (incl. the Uniswap v4 hook and the agent/concierge layer), covered by **132 tests across 15 suites**.
 - `02-backend.md` — issuer signing service + adapt the reused NestJS modules.
 - `03-frontend.md` — adapt the reused dashboard + gated app to the gate + ENS.

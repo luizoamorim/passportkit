@@ -1,424 +1,273 @@
-# PassportCreds by Node
+# PassportKit Node
 
-**White-label Compliance Passport for regulated onchain access.**
+**Reusable onchain-identity + compliance-credential rails for wallets, apps — and agents.**
 
-Built for ETHGlobal · Chainlink · Base Sepolia
+ETHGlobal Lisbon 2026 · Continuity track · forked from the public PassportCreds demo
 
-![Chainlink](https://img.shields.io/badge/Chainlink-CRE%20%2B%20Confidential%20AI-375BD2?logo=chainlink)
-![Privy](https://img.shields.io/badge/Privy-Embedded%20Wallet-7C3AED)
-![Base](https://img.shields.io/badge/Base-Sepolia-0052FF?logo=coinbase)
-![NestJS](https://img.shields.io/badge/Backend-NestJS-E0234E?logo=nestjs)
-![Next.js](https://img.shields.io/badge/Frontend-Next.js%2014-000000?logo=nextdotjs)
+![Chain](https://img.shields.io/badge/Ethereum-Sepolia-627EEA?logo=ethereum)
+![Contracts](https://img.shields.io/badge/Contracts-Foundry-black?logo=solidity)
+![World ID](https://img.shields.io/badge/World%20ID-Personhood%20%2B%20KYC-000000)
+![ENS](https://img.shields.io/badge/ENS-read--through%20resolver-5298FF)
+![Uniswap](https://img.shields.io/badge/Uniswap-v4%20hook-FF007A?logo=uniswap)
+![Frontend](https://img.shields.io/badge/Frontend-Next.js-000000?logo=nextdotjs)
+![Backend](https://img.shields.io/badge/Backend-NestJS-E0234E?logo=nestjs)
+![License](https://img.shields.io/badge/License-Apache--2.0-blue)
+
+> **Thesis:** _identity before access, compliance before liquidity._
+> **One decision core, four enforcement surfaces, humans AND agents.**
+> The hero of this demo is the **REFUSAL** — the revocation cascade, not the green check.
 
 ---
 
-## Live Demo
+## System at a glance
 
-**Frontend:** https://passport-creds-node-web.vercel.app/
+One decision core (`EligibilityGate`); every surface asks it the same question. **Revoke one claim → every surface refuses in the same block.**
 
-**Infrastructure:**
-- API + PostgreSQL: Railway
-- CRE workflow: Railway
-- Frontend: Vercel
+```mermaid
+graph LR
+    subgraph Actors
+        USER["User wallet<br/>(management key)"]
+        AGENT["Agent wallet<br/>(inherits the person)"]
+    end
 
-**Contracts — Base Sepolia (all verified on Basescan):**
+    subgraph Issue["Issue — Model B (no privileged writer)"]
+        WORLD["World ID<br/>personhood + KYC"]
+        CI["ClaimIssuer<br/>signs EIP-712 · setRevoked LATCH"]
+    end
+
+    ID["Identity (ERC-734/735)<br/>one per user · holds claims"]
+    GATE{{"EligibilityGate<br/>isEligible(identity, policyId)<br/>→ (ok, reason)"}}
+
+    subgraph Surfaces["Four enforcement surfaces — same gate"]
+        APP["Gated app<br/>(Deal Room)"]
+        ERC["GatedERC20<br/>(transfer)"]
+        ENS["ENS resolver<br/>(read-through)"]
+        HOOK["Uniswap v4<br/>(ComplianceHook)"]
+    end
+
+    WORLD --> CI
+    CI -->|signature + data| USER
+    USER -->|submitClaim| ID
+    USER -->|spawns / linkAgent| AGENT
+    AGENT -.->|resolves to person| ID
+
+    ID --> GATE
+    CI -. re-verified at read time .-> GATE
+    GATE --> APP
+    GATE --> ERC
+    GATE --> ENS
+    GATE --> HOOK
+
+    CI == revoke cascades ==> Surfaces
+
+    style GATE fill:#2563eb,color:#fff
+    style CI fill:#dc2626,color:#fff
+```
+
+**Read it in one line:** World ID (or a mock attester) makes the `ClaimIssuer` _sign_ a claim → the **user submits it themselves** to their own Identity → every surface reads the **same** `EligibilityGate` → the issuer's `setRevoked` **latch** flips all of them at once.
+
+---
+
+## What it is
+
+A user's wallet is the **management key** of their own on-chain **Identity** (ERC-734/735). A trusted **issuer only signs** claims off-chain (EIP-712); the **holder submits their own claim** — nobody writes to another user's identity (**Model B, no privileged writer**). Trust is the signature, re-verified at read time by the gate, so the holder can never override a platform decision.
+
+- **World ID** is the one _real_ verification — personhood and document-backed KYC become on-chain compliance claims. (KYC / accredited attesters are **labeled mocks** behind the same interface.)
+- **Revocation = a latch** (`ClaimIssuer.setRevoked`). While latched, `isClaimValid` is false → every surface refuses **and** no fresh claim can land. Only the issuer re-opens.
+- **Zero PII on-chain** — a claim's `data` is `abi.encode(dataHash, expiresAt, nonce)`, a hash/reference, never personal data.
+- **Free exit** — compliance blocks movement to a counterparty (transfer / swap), never your own exit (burn / removeLiquidity). Funds are never trapped.
+- **Agents inherit eligibility** — a person spawns an agent (a new wallet) linked to their identity via `linkAgent` (Model A). The agent acts under the person's credentials. **Revoke the person → their agents are blocked too.**
+
+---
+
+## Live on Ethereum Sepolia
+
+Deployed 2026-07-25 · startBlock `11350114` · admin / agent / issuer-signer `0xEc98B58F86a32aAd7B32E17f292e6B640487f2A4`
 
 | Contract | Address |
 |---|---|
-| ClaimRegistry | [`0xE33f1BD4c360A035a9F62043A54BA9812f36d634`](https://sepolia.basescan.org/address/0xE33f1BD4c360A035a9F62043A54BA9812f36d634) |
-| CompliancePassport | [`0x9EFd338b9E43577264665348Bd39548f5b044627`](https://sepolia.basescan.org/address/0x9EFd338b9E43577264665348Bd39548f5b044627) |
-| AccessGate | [`0xD23c3e140d8FA5d81D1f9966A3093Dc38443cDF6`](https://sepolia.basescan.org/address/0xD23c3e140d8FA5d81D1f9966A3093Dc38443cDF6) |
+| **EligibilityGate** ⭐ | [`0x51574D5830461FD38022987621C7bdf3a996b8d1`](https://sepolia.etherscan.io/address/0x51574D5830461FD38022987621C7bdf3a996b8d1) |
+| PassportResolver | [`0x36064023898d0451C6763a171e080b18123BE83E`](https://sepolia.etherscan.io/address/0x36064023898d0451C6763a171e080b18123BE83E) |
+| IdentityFactory | [`0x23504699EAcc1842d01998C0D57C53a2CF1638A0`](https://sepolia.etherscan.io/address/0x23504699EAcc1842d01998C0D57C53a2CF1638A0) |
+| ClaimIssuer | [`0x56F97734cC4d80af950538eAA6976398b5E58Fa9`](https://sepolia.etherscan.io/address/0x56F97734cC4d80af950538eAA6976398b5E58Fa9) |
+| IssuerRegistry | [`0xcAa549B8f1ef449BEeD00D7Bb88a828AB9E70AE7`](https://sepolia.etherscan.io/address/0xcAa549B8f1ef449BEeD00D7Bb88a828AB9E70AE7) |
+| GatedERC20 | [`0xe3a29101263567c400A0d4d47C52912d3Ed0a08d`](https://sepolia.etherscan.io/address/0xe3a29101263567c400A0d4d47C52912d3Ed0a08d) |
+| ScoreRegistry | [`0x010c452FEC23669Be2D076Efe0CAEEb28c82Aa6E`](https://sepolia.etherscan.io/address/0x010c452FEC23669Be2D076Efe0CAEEb28c82Aa6E) |
+| PassportSubnameRegistrar | [`0xb41FfDBeB9Ac19359D861AB13F3E05356B68a34B`](https://sepolia.etherscan.io/address/0xb41FfDBeB9Ac19359D861AB13F3E05356B68a34B) |
 
----
+> `Identity` is deployed **per user** by the `IdentityFactory`, so it has no fixed address here.
+> The **Uniswap v4 hook** and the **agent/concierge** layer run on **local anvil** via `make demo` (not part of the Sepolia core deployment).
 
-## Origin
+**Live ENS (verified on-chain, no keeper):**
 
-This project started from a real internal problem at **Node PropTech**.
-
-We needed a way to verify that investors accessing a regulated deal room were KYC-cleared and accredited — without storing sensitive documents, without a fragile manual process, and without building a bespoke integration for every compliance provider we might work with.
-
-As we thought about it more, we realised this is not a Node problem. Any platform dealing with regulated assets — real estate, private equity, tokenised securities — faces the exact same friction. The infrastructure for compliant onchain access simply does not exist in a reusable, privacy-preserving form.
-
-That led us to PassportCreds: a white-label, protocol-agnostic Compliance Passport that any platform can embed. The concept aligns closely with the Creds protocol described in [this paper](https://arxiv.org/pdf/2606.03771), which explores verifiable credential systems for privacy-preserving identity. The Chainlink Confidential AI Attester turned out to be the perfect primitive — we discovered it almost by accident, and it fits the use case exactly: evaluate sensitive compliance documents inside a TEE without the document ever leaving the enclave.
-
-During the build we used **Claude Code** (Claude Sonnet) and **ChatGPT** as coding assistants for scaffolding, debugging, and iteration. All product decisions and protocol architecture are human-authored.
-
----
-
-## How It Works
-
-1. User connects with **Privy Embedded Wallet**
-2. Uploads a compliance document (KYC/AML or Accredited Investor evidence)
-3. **Chainlink Confidential AI Attester** evaluates the document inside a TEE — no PII escapes the enclave
-4. Verdict delivered via webhook to backend (Railway)
-5. Backend triggers **Chainlink CRE** with `verificationId` only — no raw data, no PII
-6. CRE fetches sanitized result, validates, and writes two onchain transactions to Base Sepolia
-7. Soulbound Compliance Passport (ERC-721 + ERC-5192) minted or updated
-8. **AccessGate** reads claims and passport — Deal Room unlocks
-
----
-
-## Flow Diagram
-
-```mermaid
-flowchart TD
-
-    A["User connects wallet<br/>Privy Embedded Wallet"] --> B["PassportCreds Frontend<br/>by Node<br/>Vercel"]
-
-    B --> C{"Does wallet already<br/>have compliance claims?"}
-
-    C -->|No| D["Start Compliance Flow"]
-    C -->|Yes| X["Load Existing Passport<br/>and Claims"]
-
-    D --> E["Upload Evidence 1<br/>KYC / AML Document"]
-    E --> F["Chainlink Confidential<br/>AI Attester"]
-
-    F --> G["Attested AI Output<br/>KYC_AML_VERIFIED"]
-    G --> H["Railway Webhook<br/>POST /webhooks/ai-attester"]
-
-    H --> I["Backend Receives<br/>AI Attester Result"]
-    I --> J["Database Updated<br/>verificationId saved<br/>KYC / AML = Verified"]
-
-    J --> K["Backend Triggers CRE<br/>passes verificationId only"]
-
-    K --> L["Chainlink CRE Fetches<br/>Sanitized Result<br/>GET /cre/verification-result/:verificationId"]
-
-    L --> M["CRE Validates Payload<br/>wallet, claimType, approved,<br/>attestationHash, expiresAt"]
-
-    M --> N["Tx 1: ClaimRegistry.submitClaim<br/>KYC_AML_VERIFIED = true"]
-    N --> N2["Tx 2: CompliancePassport.syncPassport<br/>Status = LIMITED"]
-
-    N2 --> O["Frontend Updates Badge<br/>KYC / AML turns GREEN"]
-
-    O --> P{"Is Accredited Investor<br/>claim verified?"}
-
-    P -->|No| Q["Passport Status: LIMITED<br/>Deal Room unlocked<br/>Investor access blocked"]
-
-    Q --> R["Upload Evidence 2<br/>Accredited Investor Document"]
-    R --> S["Chainlink Confidential<br/>AI Attester"]
-
-    S --> T["Attested AI Output<br/>ACCREDITED_INVESTOR"]
-    T --> U["Railway Webhook<br/>POST /webhooks/ai-attester"]
-
-    U --> V["Backend Receives<br/>AI Attester Result"]
-    V --> W["Database Updated<br/>verificationId saved<br/>Accredited Investor = Verified"]
-
-    W --> Y["Backend Triggers CRE<br/>passes verificationId only"]
-
-    Y --> Z["Chainlink CRE Fetches<br/>Sanitized Result<br/>GET /cre/verification-result/:verificationId"]
-
-    Z --> ZA["CRE Validates Payload<br/>wallet, claimType, approved,<br/>attestationHash, expiresAt"]
-
-    ZA --> ZB["Tx 3: ClaimRegistry.submitClaim<br/>ACCREDITED_INVESTOR = true"]
-    ZB --> ZC["Tx 4: CompliancePassport.syncPassport<br/>ERC-721 + ERC-5192<br/>Status = GREEN"]
-
-    ZC --> ZD["Frontend Shows Passport Card<br/>Badges: KYC / AML · Accredited Investor"]
-
-    ZD --> ZE["AccessGate Read Call<br/>canAccessDealRoom(wallet)"]
-    X --> ZE
-
-    ZE --> ZF{"Access Decision"}
-
-    ZF -->|Allowed| ZG["Node PropTech Deal Room<br/>Unlocked"]
-    ZF -->|Denied| ZH["Access Blocked<br/>Missing or Failed Claims"]
-
-    subgraph FRONTEND["Frontend — Vercel"]
-        B
-        O
-        ZD
-    end
-
-    subgraph BACKEND["Backend — Railway (NestJS + PostgreSQL)"]
-        H
-        I
-        J
-        K
-        U
-        V
-        W
-        Y
-    end
-
-    subgraph CRE["Chainlink CRE — Railway"]
-        L
-        M
-        Z
-        ZA
-    end
-
-    subgraph ONCHAIN["Onchain Transactions — Base Sepolia"]
-        N
-        N2
-        ZB
-        ZC
-        ZE
-    end
-
-    subgraph CONTRACTS["Smart Contracts — Base Sepolia"]
-        CR["ClaimRegistry<br/>Stores verified claims"]
-        CP["CompliancePassport SBT<br/>ERC-721 + ERC-5192"]
-        AG["AccessGate<br/>Grants or blocks access"]
-    end
-
-    N -.updates.-> CR
-    N2 -.updates.-> CP
-    ZB -.updates.-> CR
-    ZC -.updates.-> CP
-    ZE -.reads.-> CR
-    ZE -.reads.-> CP
-    ZE -.uses.-> AG
-
-    classDef user fill:#eef2ff,stroke:#4f46e5,color:#111827;
-    classDef frontend fill:#dbeafe,stroke:#2563eb,color:#111827;
-    classDef ai fill:#fef3c7,stroke:#d97706,color:#111827;
-    classDef backend fill:#ecfdf5,stroke:#059669,color:#111827;
-    classDef cre fill:#ede9fe,stroke:#7c3aed,color:#111827;
-    classDef chain fill:#f3e8ff,stroke:#9333ea,color:#111827;
-    classDef success fill:#dcfce7,stroke:#16a34a,color:#111827;
-    classDef warning fill:#fef9c3,stroke:#ca8a04,color:#111827;
-    classDef blocked fill:#fee2e2,stroke:#dc2626,color:#111827;
-
-    class A user;
-    class B,O,ZD frontend;
-    class F,G,S,T ai;
-    class H,I,J,K,U,V,W,Y backend;
-    class L,M,Z,ZA cre;
-    class N,N2,ZB,ZC,ZE,CR,CP,AG chain;
-    class ZG success;
-    class Q warning;
-    class ZH blocked;
+```bash
+R=0x14a83c7aE0667e90ff3863C6eF12539F67e4Cd58   # DEMO PassportResolver
+RPC=https://ethereum-sepolia-rpc.publicnode.com
+cast call $R "text(bytes32,string)(string)" $(cast namehash luiz.casaazul.eth) "compliance.status" --rpc-url $RPC
+# -> GREEN   (revoke the claim and the very next lookup returns REVOKED)
 ```
 
----
+- `luiz.casaazul.eth` → `compliance.status = GREEN`
+- `bot.luiz.casaazul.eth` → `agent-registration = "1"` (ENSIP-25) + `agent.reputation = "87"`
 
-## Chainlink Integration
-
-### Chainlink Confidential AI Attester
-
-Compliance documents are evaluated inside a **Trusted Execution Environment (TEE)** using Gemma4. The document never leaves the enclave. The model returns a structured JSON verdict — `approved`, `confidence`, `reasonCode`, `summary` — delivered asynchronously to our backend via webhook.
-
-Key design decisions:
-- `verificationId` embedded in the callback URL — resolves the exact session even with concurrent verifications
-- AI output never goes onchain — only a `keccak256` attestation hash is written as the onchain fingerprint
-- Replay protection — `verificationIdHash` permanently stored in ClaimRegistry; duplicate submissions revert
-
-### Privy Embedded Wallet + Compliance-Gated Transfer Policy
-
-Privy provides the identity layer — users connect with email or social login, no browser extension needed. The wallet address becomes the compliance identity that drives every claim, passport, and access decision in the system.
-
-Beyond authentication, we use Privy's wallet infrastructure to enforce **compliance-driven transfer policies**. The passport status directly controls what a wallet can do:
-
-| Passport status | Transfer policy |
-|---|---|
-| No KYC | Capped at $50 USD/day (`NO_KYC_DAILY_50`) |
-| KYC/AML verified | User-configurable limit (`KYC_USER_CONFIGURABLE`) |
-| Compliance failed / revoked | Fully blocked (`BLOCKED`) |
-
-Policies upgrade automatically when a claim is verified and downgrade when a passport is revoked. This is the foundation for compliant onchain financial products built on Privy — the compliance passport directly governs wallet behaviour.
-
-See: [`apps/api/src/wallets/wallet-policy.service.ts`](apps/api/src/wallets/wallet-policy.service.ts)
-
-### Chainlink CRE
-
-CRE is the **sole authorized writer** to our smart contracts. It holds `CRE_UPDATER_ROLE` — the only key allowed to call `ClaimRegistry.submitClaim` and `CompliancePassport.syncPassport`.
-
-CRE workflow per verification:
-1. Receive `verificationId` from backend
-2. `GET /cre/verification-result/:verificationId` — fetch sanitized result
-3. Validate payload
-4. `keccak256(verificationId)` → `verificationIdHash`
-5. `ClaimRegistry.submitClaim(...)` — write claim onchain
-6. `CompliancePassport.syncPassport(...)` — mint or update soulbound passport
-7. `AccessGate.getAccessSummary(...)` — read access decision
-8. `POST /cre/workflow-result` — return tx hashes to backend
+Full address list: [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md).
 
 ---
 
-## Smart Contracts
-
-| Contract | Type | Role |
-|---|---|---|
-| `ClaimRegistry.sol` | AccessControl | Stores verified claims per wallet. Only CRE can write. |
-| `CompliancePassport.sol` | ERC-721 + ERC-5192 | Soulbound passport. Minted on first claim. Status derived from ClaimRegistry. |
-| `AccessGate.sol` | Read-only | Reads ClaimRegistry + CompliancePassport. Answers `canAccessDealRoom`, `canAccessInvestorArea`. |
-| `hooks/ComplianceHook.sol` | Uniswap v4 hook | Gates swaps + liquidity adds on AccessGate. Exit is never gated. |
-| `agents/HouseToken.sol` | ERC-20 | House scrip (CASA). Minted only by its treasury; `reclaim` claws it back. The agent's balance *is* its budget. |
-| `agents/HouseTreasury.sol` | Governance | Owners, m-of-n approvals, agent mandate (`perTxCap`, `expiresAt`), payment queue. `isAgentInGoodStanding` is the one view every agent surface gates on. |
-| `hooks/MandateHook.sol` | Uniswap v4 hook | Gates the CASA/mUSD pool: compliant owners, or a mandated agent within its per-tx cap. Exit is never gated. |
-
-Claims: `KYC_AML_VERIFIED` · `ACCREDITED_INVESTOR`
-
-Passport status: `NONE → IN_PROGRESS → LIMITED → GREEN` (or `RED` on KYC failure, `REVOKED` by admin)
-
-### Uniswap v4 ComplianceHook
-
-The same AccessGate that guards the Deal Room can guard a Uniswap v4 pool: the
-ComplianceHook checks the swapper (and liquidity provider) in `beforeSwap` /
-`beforeAddLiquidity` and reverts `NotCompliant(wallet, reasonCode)` for anyone the
-gate refuses — removing liquidity is deliberately ungated so funds are never trapped.
-Two demo pools show policy separation: a Deal Room pool (LIMITED or GREEN) and an
-Investor pool (GREEN only).
-
-- Local demo: `make demo` → http://localhost:3003/markets
-- Tests: `cd contracts && forge test --match-contract ComplianceHookTest`
-- Spec & design notes: [`docs/specs/uniswap-hook-spec.md`](docs/specs/uniswap-hook-spec.md)
-
-### House Concierge Agent
-
-**Agents don't KYC.** So the concierge doesn't pretend to: its authority is a mandate
-granted by the house's owners, and it only holds while those owners' passports stay
-live. Every enforcement point — the MandateHook on the CASA/mUSD pool and the
-HouseTreasury approval queue — re-reads the owners' `AccessGate` status in the same
-block, so revoking one owner's KYC instantly strips the AI of both its market access
-and its treasury (`OWNER_NOT_COMPLIANT`). Routine tickets are paid autonomously
-(swap CASA→mUSD through the gated pool, then settle the vendor's x402 invoice);
-anything above the per-tx cap is queued for m-of-n owner approval with the agent's
-decision hash anchored on-chain.
-
-- Local demo: `make demo` → http://localhost:3003/concierge
-- Tests: `cd contracts && forge test --match-path 'test/agents/*'` (29) and `npm test --workspace=apps/web` (39)
-- Spec & design notes: [`docs/specs/agent-concierge-spec.md`](docs/specs/agent-concierge-spec.md)
-
----
-
-## Repo Structure
-
-One site, one command. Everything a visitor touches is `apps/web`:
-
-```
-apps/
-  web/       — Next.js 14 App Router — THE demo site (TailwindCSS + Privy)
-      src/app/{passport,deal-room,markets,concierge}/   the four routes
-      src/app/api/demo/**                              the demo runtime (local anvil only)
-      src/lib/demo/                                    deciders · evidence · x402 · decode · positions
-      test/demo/                                       node:test for those libs
-  api/       — NestJS backend (Prisma + PostgreSQL)
-contracts/   — Foundry smart contracts (Solidity)
-      script/DeployAll.s.sol                           the one demo world
-cre/         — Chainlink CRE workflow (TypeScript + viem)
-demo/        — Synthetic compliance documents + AI prompts
-docs/        — Architecture, specs, AI usage, judges notes
-```
-
-The Uniswap hook demo and the concierge demo used to be two extra node servers on two
-extra ports. They are now the `/markets` and `/concierge` routes on the site above —
-same wallet, same chain, same design.
-
----
-
-## Privacy Rules
-
-- No PII stored onchain — only `keccak256` hashes
-- No raw documents stored anywhere — forwarded to Chainlink TEE only, then discarded
-- Backend exposes sanitized verdict to CRE only — no raw AI output, no documents
-- `verificationIdHash` replay protection on every claim submission
-
----
-
-## How to Test the Demo
-
-**No local setup needed — everything runs on Railway and Vercel.**
-
-1. Open https://passport-creds-node-web.vercel.app/
-2. Connect with Privy Embedded Wallet (email or social login — no browser extension needed)
-3. On the Passport page, click **Download Sample Document** before uploading — the app requires it
-4. Upload the downloaded file and click **Submit for Verification**
-5. The Chainlink Confidential AI Attester evaluates the document and delivers the result via webhook
-6. If the live Attester is unavailable, click **⚡ Demo: Simulate Verified** to run the full pipeline with a saved sample result
-7. Repeat for the Accredited Investor claim to reach passport status **GREEN** and unlock the Deal Room
-
-### About the prompts and sample documents
-
-The AI Attester is instructed via structured system prompts located in `demo/`:
-
-| File | Purpose |
-|---|---|
-| `demo/prompt-kyc-aml.txt` | Instructs Gemma4 to evaluate KYC/AML evidence and return structured JSON |
-| `demo/prompt-accredited-investor.txt` | Instructs Gemma4 to evaluate Accredited Investor evidence and return structured JSON |
-
-The prompts ask the model to return a minified JSON verdict only — `claimType`, `approved`, `confidence`, `reasonCode`, `summary`. No prose, no explanation. This keeps the output deterministic and parseable by the backend.
-
-The sample documents available for download in the app (`public/samples/`) are intentionally simple synthetic files. The goal is not to test document quality — it is to demonstrate the full pipeline: document → TEE evaluation → webhook → CRE → onchain claim → passport → access decision.
-
----
-
-## Quick Start (local)
-
-Two commands, and the whole demo is up:
+## The demo — one command, one site
 
 ```bash
 npm install
-make demo
+make demo          # starts anvil, deploys one world, serves the site on :3003 (DEMO_MODE=true)
 ```
 
-`make demo` starts anvil (or reuses one already listening), deploys the one demo world,
-and serves the site on **http://localhost:3003** with `DEMO_MODE=true`. Start at
-[`/`](http://localhost:3003/) — it is one story in four steps, and one wallet and one
-chain all the way through:
+A visitor connects a wallet once on the landing page and walks all four surfaces — one wallet, one chain, all the way through:
 
-| Route | What it shows |
-|---|---|
-| [`/passport`](http://localhost:3003/passport) | Get verified — AI attester → Chainlink CRE → onchain claim → soulbound passport |
-| [`/deal-room`](http://localhost:3003/deal-room) | The gated app asks the EligibilityGate, never for a document |
-| [`/markets`](http://localhost:3003/markets) | Two Uniswap v4 pools on that same gate, with the refusal reason codes |
-| [`/concierge`](http://localhost:3003/concierge) | An agent spending a mandate borrowed from compliant owners |
+| Step | Route | What happens |
+|---|---|---|
+| **1. Get verified** | [`/passport`](http://localhost:3003/passport) | World ID Selfie Check → `PROOF_OF_PERSONHOOD` (Passport **LIMITED**), then World ID Identity Check (18+) → `KYC_VERIFIED` (Passport **GREEN**). Identity is created; the **user** submits each claim; the ENS name resolves live. |
+| **2. Enter the room** | [`/deal-room`](http://localhost:3003/deal-room) | The gated app asks the `EligibilityGate`, never for a document. |
+| **3. Trade the pool** | [`/markets`](http://localhost:3003/markets) | Uniswap v4 pools on that same gate; non-compliant swaps revert `NotCompliant(wallet, reason)`, exit is always free. |
+| **4. Mandate an agent** | [`/concierge`](http://localhost:3003/concierge) | A house agent (a linked wallet) pays bills only while its human owners stay compliant — autonomous (x402) + owner-approved (m-of-n) rails. |
 
-Then revoke a claim on `/markets` and watch all four change their answer.
+**The money moment:** revoke one claim on `/markets` → the Deal Room locks, the GatedERC20 transfer fails, the ENS record flips to `REVOKED`, the v4 swap reverts, and the agent is refused — **all at once.**
 
 ```bash
 make demo RPC_PORT=8546 WEB_PORT=3010   # run a second world beside an existing one
-make demo-stop                          # stop the site, and the chain only if make demo started it
-make up                                 # the full product stack: db + api + cre + web on :3000
+make demo-stop                          # stop the site; kills the chain only if make demo started it
+make demo-explorer                      # Otterscan over the demo chain on :5100
+make up                                 # full product stack: db + api + cre + web on :3000
 ```
 
-`make demo` reuses an anvil that is already listening rather than restarting it, and
-`make demo-stop` then leaves that chain running — it only kills a node it started itself.
-`make up` is the exception: it *replaces* the chain on :8545, which is `make demo`'s default
-port too, so give the demo its own `RPC_PORT` if you want both at once.
+**Starting state (anvil dev accounts):** **operator** (KYC + accredited, admin, issuer signer, LP), **ana** (KYC, house co-owner), **rui** (identity, no claims — verified live in the demo), **concierge** and **plumber** (no identity). The house holds mUSD and has granted the concierge a per-tx CASA mandate.
 
-`make demo` is now the only demo command — the two standalone demo servers, and the
-targets that started them, are gone. Want a block explorer over the demo chain?
-`make demo-explorer` runs Otterscan on http://localhost:5100.
-
-### One demo world
-
-Every onchain demo — both gated Uniswap v4 pools and the House Concierge — lives in a
-single chain world: one PassportKit stack, one v4 PoolManager, three pools. `make demo`
-deploys it with one script; by hand that is:
-
-```bash
-anvil --silent &
-cd contracts && forge script script/DeployAll.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
-```
-
-It writes every address to `apps/web/demo-addresses.json`, the single file the site reads.
-
-Starting state: **operator** (KYC + accredited, admin, issuer signer, LP), **ana** (KYC,
-house co-owner), **rui** (identity, no claims — verified live in the demo), **concierge**
-and **plumber** (no identity at all). The house holds 50,000 mUSD and has granted the
-concierge a mandate of 200 CASA per transaction, funded with 500 CASA.
-
-### Configuration
-
-`make demo` needs no configuration — the actor keys default to the well-known anvil dev
-accounts. `apps/web/env.example` documents every variable the site reads (`DEMO_MODE`,
-`RPC_URL`, `EXPLORER_URL`, the five actor keys, `NEXT_PUBLIC_PRIVY_APP_ID`); copy it to
-`apps/web/.env.local` only to change one. **`DEMO_MODE=true` lets anyone who can reach
-the server sign with those keys — it belongs on a laptop, never on a deployment.** With
-it unset, `/passport` and `/deal-room` work as normal and `/markets` and `/concierge`
-say the runtime is off.
-
-There are two templates in `apps/web` and they are not interchangeable: **`env.example`
-is the local demo one** (`DEMO_MODE`, `RPC_URL`, the actor keys — the file you want for
-`make demo`), while **`.env.example` is the hosted Sepolia one** for a deployment of the
-product pages, and it does not turn the demo runtime on.
+> **`DEMO_MODE=true` lets anyone who can reach the server sign with the anvil keys — it belongs on a laptop, never on a deployment.** `apps/web` ships two non-interchangeable templates: **`env.example`** (local demo — `DEMO_MODE`, `RPC_URL`, actor keys) and **`.env.example`** (hosted Sepolia product pages, demo runtime off).
 
 ---
+
+## Architecture
+
+**Key invariants**
+
+- **Model B — no privileged writer.** The issuer only *signs*; the user submits their own claim. The gate re-verifies with the `ClaimIssuer` on every read.
+- **Revocation = a latch** (`setRevoked`). One flip refuses every surface and blocks fresh claims until the issuer re-opens.
+- **Agent identity (Model A).** `identityOfWallet[agentWallet] = personIdentity` — the agent inherits the person's eligibility.
+- **Free-exit.** Compliance gates the counterparty, never your own withdrawal.
+- **Zero PII on-chain.** `data = abi.encode(dataHash, expiresAt, nonce)`.
+
+Deeper detail: [`docs/architecture.md`](docs/architecture.md) · [`docs/contracts-reference.md`](docs/contracts-reference.md) · [`docs/HANDOFF.md`](docs/HANDOFF.md). Design source of truth: [`CLAUDE.md`](CLAUDE.md).
+
+---
+
+## Contracts (`contracts/`, Foundry)
+
+**14 deployable contracts** across 15 `.sol` files. **132 tests / 15 suites** (`forge test`).
+
+**Core — identity + gate + surfaces (deployed to Sepolia):**
+
+| Contract | Role |
+|---|---|
+| `IssuerRegistry` | Which issuers are trusted per claim topic (enumerable `issuersForTopic`). |
+| `ClaimIssuer` | Signs claims (EIP-712); authority on validity; `setRevoked` latch; `setSigner` global kill switch. |
+| `Identity` | The user's ONCHAINID (ERC-734 keys + ERC-735 claims), one per user. |
+| `IdentityFactory` | Creates Identity; resolves `wallet → identity`; `linkAgent` / `unlinkAgent` (Model A). |
+| `EligibilityGate` ⭐ | `isEligible(identity, policyId) → (ok, reason)` — the one read every surface uses. |
+| `GatedERC20` | Permissioned ERC-20; `_update` gated (mint/transfer gated, burn free). |
+| `ScoreRegistry` | Per-agent reputation store; surfaced live via ENS. |
+| `ens/PassportResolver` | Tenant-aware ENS resolver; `compliance.status` + ENSIP-25 `agent-registration` + `agent.reputation`, computed live in the `eth_call` — no `setText`, no keeper, no cache to invalidate. |
+| `ens/PassportSubnameRegistrar` | Issues `user.tenant.eth` subnames by code, binds node → identity. |
+| `libraries/Types` | Shared vocabulary (key purposes, claim topics, reason codes). Not deployable. |
+
+**Uniswap v4 + agent economy (local anvil demo):**
+
+| Contract | Role |
+|---|---|
+| `hooks/ComplianceHook` | v4 hook; `beforeSwap` / `beforeAddLiquidity` gate on the same `EligibilityGate`; remove-liquidity ungated. |
+| `demo/DemoPositionRouter` | Caller-bound LP router (positions keyed by `msg.sender`). |
+| `agents/HouseToken` | ERC-20 "CASA" house scrip; only the treasury mints; `reclaim` claws it back. |
+| `agents/HouseTreasury` | House governance: owners, m-of-n approval queue, the concierge mandate, `isAgentInGoodStanding` (re-checks owners live on the gate). |
+| `agents/MandateHook` | v4 hook gating the CASA/mUSD pool; agent swaps within cap while its owners stay compliant. |
+
+**Enforcement surfaces = 4:** gated app (Deal Room) · GatedERC20 · ENS resolver · Uniswap v4 hook. The concierge is the agent-economy expression of the same gate. Claim topics: `PROOF_OF_PERSONHOOD` · `KYC_VERIFIED` · `ACCREDITED_INVESTOR`.
+
+---
+
+## Backend API (NestJS, `apps/api`)
+
+`walletAddress` is the identity. Active endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /identity/create` | Agent role provisions the user's Identity via `IdentityFactory.createIdentity`. |
+| `GET /eligibility/:wallet` | Resolves wallet → identity → `isEligible` for the relevant policies (badges + access state). |
+| `GET /issuer/signer` | The issuer signer address. |
+| `POST /issuer/mock-claim` | `DEMO_MODE` — issuer signs a claim `{ signature, data }` the **user** submits (Model B). |
+| `POST /issuer/revoke` | `DEMO_MODE` — `ClaimIssuer.setRevoked(identity, topic, true)` (the money moment). |
+| `POST /world/request` | World ID — RP-signed request to open the widget. |
+| `POST /world/verify` | Verifies the World proof, returns a signed personhood/KYC claim for the user to submit. |
+
+Legacy PassportCreds modules (`cre`, `attester`, `verification`, `webhooks`, `passport`, `access`, `transactions`, `wallets`) are kept but not wired into the new flow.
+
+---
+
+## Repo layout
+
+```
+contracts/     Foundry — identity, gate, surfaces, v4 hook, agent economy (+ tests)
+    script/DeployPassportKit.s.sol   the Sepolia core
+    script/DeployAll.s.sol           the one local demo world (v4 pools + treasury)
+apps/api/      NestJS — identity creation, eligibility, issuer signing, World ID
+apps/web/      Next.js — /passport, /deal-room, /markets, /concierge
+    src/app/api/demo/**              the demo runtime (local anvil only, 403 unless DEMO_MODE)
+    src/lib/demo/                    deciders · evidence · x402 · decode · positions
+cre/           Chainlink CRE workspace (legacy PassportCreds flow)
+demo/          Synthetic compliance documents + AI prompts
+docs/          Architecture, deployments, contracts reference, specs, prompts, World ID testing
+```
+
+The Uniswap hook and concierge demos used to be two standalone node servers on `:4180` / `:4190`; they are now the `/markets` and `/concierge` routes on the site above — same wallet, same chain, same design.
+
+---
+
+## Run / develop
+
+```bash
+# Contracts
+cd contracts
+git submodule update --init --recursive     # OpenZeppelin + forge-std (v4 suites also need the v4-core submodule)
+forge test                                   # 132 tests / 15 suites
+forge script script/DeployPassportKit.s.sol --rpc-url $RPC_URL --broadcast --verify
+
+# Backend (apps/api) — copy .env.example; DEMO_MODE=true enables the issuer/revoke endpoints
+npm run dev:api
+
+# Frontend (apps/web) — copy .env.example (NEXT_PUBLIC_* gate/World/ENS vars)
+npm run dev:web        # standalone dev on :3000  (or `make demo` for the full one-world site)
+```
+
+Requires Node ≥ 20 and Foundry. Workspaces: `apps/api`, `apps/web`, `cre`.
+
+---
+
+## Boundaries / honesty
+
+- **World ID is real** (personhood + document-backed KYC). **KYC / accredited attesters are labeled mocks** — regulated / TEE providers plug into the same interface later.
+- **No hard-coded demo values** — ENS resolves live on-chain.
+- **Zero PII** is stored or written on-chain.
+- **New, public code only** — nothing from any private production codebase.
+- **AI-assisted, attributed** — see [`AI-USAGE.md`](AI-USAGE.md); specs and prompts ship in [`docs/`](docs/). Base-vs-delta disclosure in [`WHATS-NEW.md`](WHATS-NEW.md).
 
 ## Documentation
 
 | Doc | Description |
 |---|---|
 | [Architecture](docs/architecture.md) | Actors, stack, data flow, design decisions |
-| [AI Usage](docs/ai-usage.md) | How AI is used in the product and in development |
-| [Judges](docs/judges.md) | Prize tracks, proof of work, full flow diagram |
+| [Handoff](docs/HANDOFF.md) | Current status, flows, what's left |
+| [Deployments](docs/DEPLOYMENTS.md) | Sepolia addresses + live ENS demo |
+| [Contracts reference](docs/contracts-reference.md) | Contract-by-contract detail |
+| [World ID testing](docs/world-id-testing.md) | Developer + user feedback report |
+| [Judges](docs/judges.md) | Prize tracks, proof of work |
+
+## License
+
+[Apache-2.0](LICENSE).

@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# apps/web — PassportKit demo site
 
-## Getting Started
+The Next.js (App Router) frontend and the **one demo site**. A visitor connects a wallet once on the landing page and walks all four enforcement surfaces — one wallet, one chain, all the way through. See the [root README](../../README.md) for the full architecture.
 
-First, run the development server:
+## Routes
+
+| Route | What it shows |
+|---|---|
+| `/` | Landing — connect a wallet, walk the four steps. |
+| `/passport` | Get verified: create an Identity, run World ID (personhood → **LIMITED**, KYC → **GREEN**), the user submits each claim, the ENS name resolves live. |
+| `/deal-room` | The gated app — asks the `EligibilityGate`, never for a document. |
+| `/markets` | Uniswap v4 pools gated by the same gate; non-compliant swaps revert `NotCompliant(wallet, reason)`, exit is always free. |
+| `/concierge` | A house agent (a linked wallet) spending a mandate that holds only while its human owners stay compliant. |
+| `/hero` | Standalone ENSIP-25 agent-identity card. |
+
+`/passport` and `/deal-room` are the product pages and work against Sepolia. `/markets` and `/concierge` need the local demo runtime (below).
+
+## The demo runtime
+
+The demo's server-side logic lives in route handlers under `src/app/api/demo/**` (`world`, `markets`, `concierge`, `tx/[hash]`, `vendor/invoice`) over the viem libs in `src/lib/demo/` (`deciders` · `evidence` · `x402` · `decode` · `positions`). Every handler calls `assertDemo()` first and answers **403 unless `DEMO_MODE=true`**, so the anvil actor keys stay server-side and never reach a `NEXT_PUBLIC_*` var.
+
+## Run
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# from the repo root — the full one-world demo (anvil + deploy + site on :3003)
+make demo
+
+# or standalone dev against a configured backend/chain
+npm run dev                          # Next dev on :3000
+npm run dev:web                      # equivalently, from the repo root
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Two **non-interchangeable** templates:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **`env.example`** — the local demo (`DEMO_MODE`, `RPC_URL`, `EXPLORER_URL`, the anvil actor keys, `NEXT_PUBLIC_PRIVY_APP_ID`). Copy to `.env.local` for `make demo`.
+- **`.env.example`** — a hosted Sepolia deployment of the product pages (`NEXT_PUBLIC_*` gate / World / ENS addresses). Does **not** turn the demo runtime on.
 
-## Learn More
+> **`DEMO_MODE=true` lets anyone who can reach the server sign with the anvil keys — it belongs on a laptop, never on a deployment.**
 
-To learn more about Next.js, take a look at the following resources:
+## Test
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test               # node:test over test/demo/ (decider rules, x402, evidence hashing, revert decoding, positions)
+```
