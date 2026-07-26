@@ -48,8 +48,9 @@ export function ApprovalQueue({
               <div>
                 <p className="text-[13px] text-[#0D1428]">
                   <b className="font-semibold">#{payment.id}</b> · {payment.amount} mUSD →{' '}
+                  {/* the treasury stores an address; the world read attaches the name when it knows one */}
                   <span className="font-mono text-xs" title={payment.vendor}>
-                    {short(payment.vendor)}
+                    {payment.vendorEns ?? short(payment.vendor)}
                   </span>
                 </p>
                 <p className="mt-0.5 font-mono text-[10.5px] text-[#9CA3AF]">

@@ -22,7 +22,8 @@ export function ActorCard({
   rows,
   children,
 }: {
-  name: string;
+  /** the identifier the audience reads — an `EnsName`, usually, cased by the caller */
+  name: React.ReactNode;
   role?: string;
   /** headline state — a `StatusPill`, usually */
   badge?: React.ReactNode;
@@ -33,8 +34,9 @@ export function ActorCard({
   return (
     <section className="bg-white border border-[#DDE1EA] rounded-xl p-5 flex flex-col">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-[#0D1428] capitalize">{name}</h2>
+        <div className="min-w-0">
+          {/* no `capitalize` — an ENS name is lower case, and mangling it would be a lie */}
+          <h2 className="text-base font-bold text-[#0D1428]">{name}</h2>
           {role && <p className="text-xs text-[#4B5568] mt-0.5">{role}</p>}
         </div>
         {badge}

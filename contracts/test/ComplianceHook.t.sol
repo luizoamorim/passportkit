@@ -134,10 +134,17 @@ contract ComplianceHookTest is Test {
     // --- helpers ---
 
     function _deployHook(uint160 target, uint256 policyId) internal returns (ComplianceHook hook) {
+        return _deployHook(target, policyId, address(0)); // no bootstrap LP unless a test asks
+    }
+
+    function _deployHook(uint160 target, uint256 policyId, address bootstrapLp)
+        internal
+        returns (ComplianceHook hook)
+    {
         hook = ComplianceHook(address(target));
         deployCodeTo(
             "ComplianceHook.sol:ComplianceHook",
-            abi.encode(poolManager, gate, factory, policyId),
+            abi.encode(poolManager, gate, factory, policyId, bootstrapLp),
             address(hook)
         );
     }
@@ -406,5 +413,94 @@ contract ComplianceHookTest is Test {
 
         _setRevoked(ana, KYC, true);
         assertEq(dealHook.reasonFor(ana), bytes32("MISSING_KYC"));
+    }
+
+    // --- bootstrapLp: opens an EMPTY pool, and nothing else ---
+
+    /// rui has no identity at all, so every one of these would refuse without the exemption.
+    function _bootstrapPool() internal returns (ComplianceHook hook, PoolKey memory key) {
+        hook = _deployHook(uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG) ^ (0x4447 << 144), POLICY_DEAL, rui);
+        key = _initPool(hook);
+
+        token0.mint(rui, 10_000 ether);
+        token1.mint(rui, 10_000 ether);
+        vm.startPrank(rui);
+        token0.approve(address(liquidityRouter), type(uint256).max);
+        token1.approve(address(liquidityRouter), type(uint256).max);
+        token0.approve(address(swapRouter), type(uint256).max);
+        token1.approve(address(swapRouter), type(uint256).max);
+        vm.stopPrank();
+    }
+
+    function _addLiquidityAs(address who, PoolKey memory key, int256 delta) internal {
+        vm.prank(who);
+        liquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: delta, salt: 0}),
+            abi.encode(who)
+        );
+    }
+
+    function test_bootstrapLp_seeds_an_empty_pool_without_a_claim() public {
+        (ComplianceHook hook, PoolKey memory key) = _bootstrapPool();
+
+        assertEq(hook.reasonFor(rui), bytes32("NO_IDENTITY")); // still not compliant
+        assertTrue(hook.isBootstrapping(key, rui));
+
+        _addLiquidityAs(rui, key, 1_000e18); // does not revert
+    }
+
+    /// The exemption is one-shot: once the pool holds liquidity it is closed, even for the
+    /// bootstrap LP itself.
+    function test_bootstrapLp_refused_once_the_pool_has_liquidity() public {
+        (ComplianceHook hook, PoolKey memory key) = _bootstrapPool();
+        _addLiquidityAs(rui, key, 1_000e18);
+
+        assertFalse(hook.isBootstrapping(key, rui));
+        _expectNotCompliant(hook, IHooks.beforeAddLiquidity.selector, rui, "NO_IDENTITY");
+        _addLiquidityAs(rui, key, 1_000e18);
+    }
+
+    /// The whole point: seeding the pool never buys the right to trade in it.
+    function test_bootstrapLp_is_never_exempt_from_swap() public {
+        (ComplianceHook hook, PoolKey memory key) = _bootstrapPool();
+        _addLiquidityAs(rui, key, 1_000e18);
+
+        _expectNotCompliant(hook, IHooks.beforeSwap.selector, rui, "NO_IDENTITY");
+        vm.prank(rui);
+        swapRouter.swap(
+            key,
+            SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: SQRT_PRICE_1_1 / 2}),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            abi.encode(rui)
+        );
+    }
+
+    /// Even on an empty pool the exemption is one address only.
+    function test_bootstrapLp_does_not_exempt_anyone_else() public {
+        (ComplianceHook hook, PoolKey memory key) = _bootstrapPool();
+        _onboard(ana); // identity, no claims
+
+        assertFalse(hook.isBootstrapping(key, ana));
+        _expectNotCompliant(hook, IHooks.beforeAddLiquidity.selector, ana, "MISSING_KYC");
+        _addLiquidityAs(ana, key, 1_000e18);
+    }
+
+    /// bootstrapLp = address(0) means "no exemption" — hookData declaring address(0) as the
+    /// actor must not slip through as a match.
+    function test_zero_bootstrapLp_grants_nothing() public {
+        assertFalse(dealHook.isBootstrapping(dealPool, address(0)));
+
+        ComplianceHook hook =
+            _deployHook(uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG) ^ (0x4448 << 144), POLICY_DEAL, address(0));
+        PoolKey memory key = _initPool(hook);
+        assertFalse(hook.isBootstrapping(key, address(0)));
+
+        _expectNotCompliant(hook, IHooks.beforeAddLiquidity.selector, address(0), "NO_IDENTITY");
+        liquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: 1_000e18, salt: 0}),
+            abi.encode(address(0))
+        );
     }
 }

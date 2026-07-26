@@ -31,9 +31,32 @@ export interface DemoAccess {
   reason: string | null;
 }
 
+/**
+ * An actor's ENS name, as `src/lib/demo/ens.ts` assembles it. The name itself is demo
+ * config and always present; everything read off PassportResolver degrades to null, so
+ * a page renders the wallet instead — never a blank.
+ */
+export interface DemoEns {
+  /** e.g. `ana.casaazul.eth`, or `bot.ana.casaazul.eth` for an agent */
+  name: string;
+  /** `compliance.status` verbatim: `NONE` | `GREEN` | `REVOKED`; null when unreadable */
+  status: string | null;
+  /**
+   * An AGENT only: the principal whose identity this name resolves to. Its name is a
+   * SUBNAME of theirs, so the two statuses move together — revoke the principal and
+   * the agent's name goes REVOKED with it. null for a person's own name.
+   */
+  principal: { actor: string; name: string; wallet: string } | null;
+  /** ENSIP-25 registration (agents only): '1' while the link is live, '' when it is not */
+  registration: string | null;
+  /** ENSIP-25 reputation (agents only) */
+  reputation: string | null;
+}
+
 export interface DemoActorState {
   name: string;
   wallet: string;
+  ens: DemoEns;
   identity: string | null;
   claims: { kyc: DemoClaim; accredited: DemoClaim };
   access: { deal: DemoAccess; investor: DemoAccess };
@@ -52,11 +75,14 @@ export interface DemoPoolRow {
 export interface DemoOwner {
   name: string;
   wallet: string;
+  ens: DemoEns;
   compliant: boolean;
 }
 
 export interface DemoAgent {
   wallet: string;
+  /** carries `principal` — this agent acts under a PERSON's identity, never its own */
+  ens: DemoEns;
   standing: { ok: boolean; reason: string | null };
   casa: string;
   musd: string;
@@ -66,6 +92,8 @@ export interface DemoAgent {
 export interface DemoPayment {
   id: number;
   vendor: string;
+  /** the vendor's ENS name when it is a demo actor, null otherwise */
+  vendorEns: string | null;
   amount: string;
   evidenceHash: string;
   approvals: number;

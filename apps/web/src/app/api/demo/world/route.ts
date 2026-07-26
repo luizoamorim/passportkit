@@ -39,6 +39,7 @@ import {
   actorAddress,
   type DemoActor,
 } from '@/lib/demo/chain';
+import { ensNameForWallet, ensWorld, type DemoEns } from '@/lib/demo/ens';
 import { CLAIM_TOPICS, claimState, identityOf, isCompliant } from '@/lib/demo/identity';
 import { aggregateLiquidity, lastPrices } from '@/lib/demo/positions.js';
 import { listTickets } from '@/lib/demo/tickets';
@@ -53,9 +54,10 @@ const IDENTITY_ACTORS: DemoActor[] = ['operator', 'ana', 'rui'];
 
 // ---------------------------------------------------------------- reads
 
-/// One actor row: identity, both claims, both pool verdicts with their reason
-/// codes, LP positions and balances — the hook demo's `actorState`, verbatim.
-async function actorState(name: DemoActor, now: number, positions: Map<string, bigint>) {
+/// One actor row: their ENS name, identity, both claims, both pool verdicts with
+/// their reason codes, LP positions and balances — the hook demo's `actorState`
+/// plus the name, so a page never has to know which label belongs to which actor.
+async function actorState(name: DemoActor, now: number, positions: Map<string, bigint>, ens: DemoEns) {
   const A = addresses();
   const P = pools();
   const wallet = actorAddress(name);
@@ -82,6 +84,7 @@ async function actorState(name: DemoActor, now: number, positions: Map<string, b
   return {
     name,
     wallet,
+    ens,
     identity,
     claims: {
       kyc: await claimState(identity, CLAIM_TOPICS.kyc, now),
@@ -99,13 +102,21 @@ async function actorState(name: DemoActor, now: number, positions: Map<string, b
   };
 }
 
-async function readOwners() {
+async function readOwners(ens: Record<DemoActor, DemoEns>) {
   return Promise.all(
-    OWNERS.map(async (name) => ({ name, wallet: actorAddress(name), compliant: await isCompliant(actorAddress(name)) })),
+    OWNERS.map(async (name) => ({
+      name,
+      wallet: actorAddress(name),
+      ens: ens[name],
+      compliant: await isCompliant(actorAddress(name)),
+    })),
   );
 }
 
-async function readAgent() {
+/// The agent's row. `ens` is the one that matters: its name is a subname of ANA's and
+/// resolves to HER identity, so its `compliance.status` is hers — the page reads the
+/// relationship off `ens.principal` instead of asserting it.
+async function readAgent(ens: DemoEns) {
   const A = addresses();
   const wallet = actorAddress('concierge');
   const [standing, casa, musd, perTxCap] = await Promise.all([
@@ -121,6 +132,7 @@ async function readAgent() {
   ]);
   return {
     wallet,
+    ens,
     standing: { ok: standing[0], reason: bytes32ToString(standing[1]) || null },
     casa: fixed(casa),
     musd: fixed(musd),
@@ -146,6 +158,8 @@ async function readPayments() {
   return rows.map(([vendor, amount, evidenceHash, approvals, executed], i) => ({
     id: Number(ids[i]),
     vendor,
+    // the treasury only knows the address; the name is config, so it is attached here
+    vendorEns: ensNameForWallet(vendor),
     amount: fixed(amount),
     evidenceHash,
     approvals: Number(approvals),
@@ -174,10 +188,15 @@ async function readWorld() {
     price: (prices.get(P[name].id) ?? 1).toFixed(4),
   });
 
+  // the whole name layer in one batch, before the rows that carry it — an actor appears
+  // in several of them (ana is a markets actor, an owner AND the agent's principal) and
+  // the resolver must not be asked the same question three times
+  const ens = await ensWorld();
+
   const [actors, owners, agent, payments, treasuryMusd, approvalThreshold] = await Promise.all([
-    Promise.all(IDENTITY_ACTORS.map((name) => actorState(name, now, positions))),
-    readOwners(),
-    readAgent(),
+    Promise.all(IDENTITY_ACTORS.map((name) => actorState(name, now, positions, ens[name]))),
+    readOwners(ens),
+    readAgent(ens.concierge),
     readPayments(),
     readBalance(A.musd, A.treasury),
     publicClient.readContract({ address: A.treasury, abi: TREASURY_ABI, functionName: 'APPROVAL_THRESHOLD' }),

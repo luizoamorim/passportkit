@@ -27,9 +27,16 @@ const GATED_ABI = parseAbi(['function mint(address to, uint256 amt)']);
 
 // EIP-7702 delegated agent wallet: pin an explicit gas so viem doesn't overshoot the RPC cap.
 const WRITE_GAS = BigInt(1_000_000);
-// Gas drip so a fresh Privy / agent wallet can send its own txs, and the token float the agent trades.
-const DRIP_WEI = parseEther('0.005');
-const DRIP_MIN_WEI = parseEther('0.003'); // skip the drip if the wallet already has this much
+/**
+ * Gas drip so a fresh Privy / agent wallet can send its own txs, and the token float the agent trades.
+ *
+ * The agent now acts on TWO enforcement surfaces, so one session is roughly: mint mCASA (~51k) +
+ * approve the v4 router (~46k) + swap (~221k) + a GatedERC20 transfer (~150k) + one refused retry of
+ * each. Call it ~800k gas, and viem reserves `gasLimit * maxFeePerGas` up front on every send, so the
+ * drip has to cover the ceiling rather than the spend. Env-overridable for a congested Sepolia.
+ */
+const DRIP_WEI = parseEther(process.env.HERO_GAS_DRIP_ETH ?? '0.01');
+const DRIP_MIN_WEI = parseEther(process.env.HERO_GAS_DRIP_MIN_ETH ?? '0.006'); // skip if already this rich
 const AGENT_TOKEN_MINT = parseEther('1000');
 
 function resolveChain(chainId: number): Chain {

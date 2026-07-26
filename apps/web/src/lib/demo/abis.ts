@@ -141,6 +141,33 @@ export const HOOK_ABI = [
   },
 ] as const;
 
+// PassportResolver (ENS, surface #3) — every record is computed at read time from the
+// same gate the pools ask, so there is nothing to write and nothing to cache.
+export const RESOLVER_ABI = [
+  {
+    type: 'function',
+    name: 'text',
+    stateMutability: 'view',
+    inputs: [{ type: 'bytes32' }, { type: 'string' }],
+    outputs: [{ type: 'string' }],
+  },
+  // ENSIP-25 record keys, derived on-chain from the agent's wallet
+  {
+    type: 'function',
+    name: 'agentRegistrationKey',
+    stateMutability: 'view',
+    inputs: [{ type: 'address' }],
+    outputs: [{ type: 'string' }],
+  },
+  {
+    type: 'function',
+    name: 'agentReputationKey',
+    stateMutability: 'pure',
+    inputs: [{ type: 'address' }],
+    outputs: [{ type: 'string' }],
+  },
+] as const;
+
 export const TREASURY_ABI = [
   {
     type: 'function',

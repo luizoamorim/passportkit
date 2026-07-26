@@ -198,7 +198,20 @@ function bootChain(): Chain {
   }
 }
 
-export const publicClient = createPublicClient({ chain: bootChain(), transport: httpTransport(RPC_URL) });
+/**
+ * JSON-RPC batching is what makes this usable on a public chain. One world read fans out ~50
+ * concurrent eth_calls; sent individually a hosted RPC rate-limits most of them (measured on
+ * Alchemy: 51 of 60 parallel calls -> HTTP 429, surfacing as "HTTP request failed"), while the
+ * same 60 packed into a single batched POST return 200 in ~0.2s. Anvil accepts batches too, so
+ * this is not testnet-only special-casing.
+ */
+export const publicClient = createPublicClient({
+  chain: bootChain(),
+  // A hosted free tier meters COMPUTE UNITS, not requests, so batching alone does not stop a
+  // burst from tripping the limit — it just packs it into one 429. Retrying with a backoff is
+  // what actually rides it out: the limiter refills continuously, so a retried batch lands.
+  transport: httpTransport(RPC_URL, { batch: true, retryCount: 6, retryDelay: 300 }),
+});
 
 /// Wallet client for one demo actor. Server-side only — see the file header.
 export function walletFor(actor: DemoActor): WalletClient {
@@ -314,26 +327,59 @@ export interface RawLog {
   topics: Hex[];
 }
 
+/**
+ * How many blocks one eth_getLogs may span. Anvil has no limit, but public Sepolia RPCs do
+ * and they disagree: Alchemy's free tier caps the range at 10 blocks, and non-archive nodes
+ * refuse a fromBlock older than their retention window entirely. Scanning deployBlock->latest
+ * in a single request therefore fails on every free endpoint, so the scan is paged.
+ * Raise it with RPC_LOG_CHUNK on an RPC that allows wider ranges — fewer round-trips.
+ */
+const LOG_CHUNK = BigInt(process.env.RPC_LOG_CHUNK ?? 10);
+
+/**
+ * Pages fetched per world read. The backfill from deployBlock can be hundreds of pages after a
+ * restart, and firing them all at once exhausts a hosted RPC's rate limit — which then fails the
+ * unrelated reads in the same world read, so the whole page 500s. Capping spreads the backfill
+ * across successive polls: the demo is usable immediately and the history fills in behind it.
+ */
+const LOG_PAGES_PER_READ = Number(process.env.RPC_LOG_PAGES ?? 12);
+
 /// Incremental eth_getLogs over the PoolManager's ModifyLiquidity + Swap events —
-/// the source for pool liquidity, per-actor positions and last price.
+/// the source for pool liquidity, per-actor positions and last price. Paged (see LOG_CHUNK)
+/// and cached, so only blocks produced since the last call are ever fetched.
 export async function refreshLogs(): Promise<RawLog[]> {
   const A = addresses();
   const cache = (state.logCache ??= { nextBlock: BigInt(A.deployBlock ?? 0), logs: [] });
-  const latest = await publicClient.getBlockNumber({ cacheTime: 0 });
-  if (latest >= cache.nextBlock) {
-    const fresh = await publicClient.request({
-      method: 'eth_getLogs',
-      params: [
-        {
-          fromBlock: toHex(cache.nextBlock),
-          toBlock: toHex(latest),
-          address: A.poolManager,
-          topics: [[MODIFY_LIQUIDITY_TOPIC, SWAP_TOPIC]],
-        },
-      ],
-    } as never);
-    cache.logs.push(...(fresh as unknown as RawLog[]));
-    cache.nextBlock = latest + 1n;
+
+  let latest: bigint;
+  try {
+    latest = await publicClient.getBlockNumber({ cacheTime: 0 });
+  } catch {
+    return cache.logs; // RPC hiccup: serve what we have rather than failing the whole world read
+  }
+
+  for (let page = 0; page < LOG_PAGES_PER_READ && cache.nextBlock <= latest; page++) {
+    const to = cache.nextBlock + LOG_CHUNK - 1n < latest ? cache.nextBlock + LOG_CHUNK - 1n : latest;
+    try {
+      const fresh = await publicClient.request({
+        method: 'eth_getLogs',
+        params: [
+          {
+            fromBlock: toHex(cache.nextBlock),
+            toBlock: toHex(to),
+            address: A.poolManager,
+            topics: [[MODIFY_LIQUIDITY_TOPIC, SWAP_TOPIC]],
+          },
+        ],
+      } as never);
+      cache.logs.push(...(fresh as unknown as RawLog[]));
+      cache.nextBlock = to + 1n; // advance even on an empty page, so we never re-scan
+    } catch {
+      // A backfill can be hundreds of pages on a public chain, and one flaky page must not
+      // fail the whole world read. Keep what we have; nextBlock is unmoved, so the next poll
+      // resumes exactly here and the scan converges instead of restarting.
+      break;
+    }
   }
   return cache.logs;
 }
@@ -465,6 +511,10 @@ export function failure(err: unknown): Refusal {
   if (dec) {
     return { ok: false, reason: dec.reason, wallet: dec.wallet, message: `Refused(${short(dec.wallet)}, ${dec.reason})` };
   }
+  // Not a refusal, so it is a genuine fault (RPC down, rate limit, bad address). The client only
+  // ever sees a one-line message, which is useless when something breaks mid-demo — log the whole
+  // thing server-side so the terminal says which call actually failed.
+  console.error('[demo] unexpected failure:', err);
   const e = err as { shortMessage?: string; message?: string };
   return { ok: false, reason: 'ERROR', wallet: null, message: String(e?.shortMessage ?? e?.message ?? err).slice(0, 300) };
 }

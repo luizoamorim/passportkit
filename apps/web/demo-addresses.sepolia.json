@@ -1,0 +1,39 @@
+{
+  "chainId": 11155111,
+  "deployBlock": 11352350,
+  "issuerRegistry": "0xCFc0b7Cf6B877d3F80A57123b85ba7D9f4c965e1",
+  "claimIssuer": "0x997FfC7e02f405deF917d28481A4B5Da0b356d29",
+  "identityFactory": "0x3c8315ed76bc95cD009B96516e6c6d60145f9c96",
+  "eligibilityGate": "0x44d96CCa9BF17deF6E2BF6D00dbF2Ee5eee06998",
+  "poolManager": "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543",
+  "swapRouter": "0x5747bBcBFB8536529C2b004049920836488E1A94",
+  "liquidityRouter": "0x12917E5924Dcf6CAd7AeaC57B626e40CBB1947B5",
+  "token0": "0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA",
+  "token0Symbol": "mUSDC",
+  "token1": "0x77Cb80742E424E688A8AE5214000b9af7Ad7C384",
+  "token1Symbol": "mCASA",
+  "dealHook": "0x6C12292FB54B27C2F6DE632276976418af5F4880",
+  "investorHook": "0x87A2483F1ADD5e3C03C74Dc281675E6B394f8880",
+  "treasury": "0x27a46bAdc30d0DF6C0c07B51fE45391fc75ED101",
+  "mandateHook": "0x7c981b7644dF6c1569Be461bdBBe913DeA6eC880",
+  "casa": "0xcE2bE1142Cf3e722ab32c01E13EeF160ccf96601",
+  "musd": "0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA",
+  "fee": 3000,
+  "tickSpacing": 60,
+  "policies": {
+    "deal": 1,
+    "investor": 2
+  },
+  "actors": {
+    "operator": "0x8368c1EAEad096124665E80D68eD0e763c242dC8",
+    "ana": "0x420C0Ae897B55195f702036500B92feFc94ec19E",
+    "rui": "0x255396b728e298f3b3073ded6bcBaAAC77Af72e8",
+    "concierge": "0x1E620574B1da33A2494162C8ba030F8fFeDb71b5",
+    "plumber": "0xF41AF811710072948F1B81B5a63f49F3471261E8"
+  },
+  "identities": {
+    "operator": "0x47A7b874391c99d1C1abB77B52ce42506F4DA753",
+    "ana": "0x4aA55CAC32ac88Eb2Ec1bf78E732e2BEc4240085",
+    "rui": "0xC4De98a7BC103A3bC79e262BdA00ec5A0fB9362A"
+  }
+}
