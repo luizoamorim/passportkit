@@ -207,7 +207,10 @@ function bootChain(): Chain {
  */
 export const publicClient = createPublicClient({
   chain: bootChain(),
-  transport: httpTransport(RPC_URL, { batch: true }),
+  // A hosted free tier meters COMPUTE UNITS, not requests, so batching alone does not stop a
+  // burst from tripping the limit — it just packs it into one 429. Retrying with a backoff is
+  // what actually rides it out: the limiter refills continuously, so a retried batch lands.
+  transport: httpTransport(RPC_URL, { batch: true, retryCount: 6, retryDelay: 300 }),
 });
 
 /// Wallet client for one demo actor. Server-side only — see the file header.
