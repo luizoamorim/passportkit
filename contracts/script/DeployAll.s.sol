@@ -263,14 +263,16 @@ contract DeployAll is Script {
     }
 
     function _deployComplianceHook(uint160 flags, uint256 policyId) internal returns (ComplianceHook hook) {
-        bytes memory args = abi.encode(poolManager, eligibilityGate, identityFactory, policyId);
+        // No bootstrap LP: the operator is fully verified below, so it seeds through the gate.
+        bytes memory args = abi.encode(poolManager, eligibilityGate, identityFactory, policyId, address(0));
         (address hookAddress, bytes32 salt) =
             HookMiner.find(CREATE2_FACTORY, flags, type(ComplianceHook).creationCode, args);
         hook = new ComplianceHook{ salt: salt }(
             poolManager,
             IEligibilityGate(address(eligibilityGate)),
             IIdentityResolver(address(identityFactory)),
-            policyId
+            policyId,
+            address(0)
         );
         require(address(hook) == hookAddress, "compliance hook address mismatch");
     }

@@ -76,6 +76,7 @@ contract DeployHooks is Script {
     address internal gate;
     address internal identityFactory;
     address internal treasury;
+    address internal bootstrapLp;
 
     // Outputs.
     address internal token0;
@@ -100,6 +101,9 @@ contract DeployHooks is Script {
         identityFactory = vm.envAddress("IDENTITY_FACTORY_ADDRESS");
         treasury = vm.envOr("HOUSE_TREASURY", address(0));
         bool seedLiquidity = vm.envOr("SEED_LIQUIDITY", false);
+        // Defaults to the deployer so a fresh pool can be opened at all; BOOTSTRAP_LP=<zero>
+        // deploys hooks with no exemption whatsoever (then only a compliant wallet can LP).
+        bootstrapLp = vm.envOr("BOOTSTRAP_LP", deployer);
 
         _preflight(seedLiquidity);
 
@@ -137,6 +141,9 @@ contract DeployHooks is Script {
             require(treasury.code.length > 0, "HOUSE_TREASURY has no code on this chain");
         }
         if (!seedLiquidity) return;
+        // The bootstrap LP opens an empty pool without passing the policy — that is the
+        // whole point of it, so there is nothing to pre-check.
+        if (bootstrapLp == deployer) return;
 
         (bool okDeal, bytes32 dealReason) = _eligibility(deployer, POLICY_DEAL_ROOM);
         (bool okInvestor, bytes32 investorReason) = _eligibility(deployer, POLICY_INVESTOR);
@@ -199,12 +206,12 @@ contract DeployHooks is Script {
      * the pool would be initialized against a hook the PoolManager rejects.
      */
     function _deployComplianceHook(uint256 policyId) internal returns (address) {
-        bytes memory args = abi.encode(poolManager, gate, identityFactory, policyId);
+        bytes memory args = abi.encode(poolManager, gate, identityFactory, policyId, bootstrapLp);
         (address mined, bytes32 salt) =
             HookMiner.find(CREATE2_FACTORY, HOOK_FLAGS, type(ComplianceHook).creationCode, args);
 
         ComplianceHook hook = new ComplianceHook{ salt: salt }(
-            poolManager, IEligibilityGate(gate), IIdentityResolver(identityFactory), policyId
+            poolManager, IEligibilityGate(gate), IIdentityResolver(identityFactory), policyId, bootstrapLp
         );
         require(address(hook) == mined, "compliance hook address mismatch");
         return address(hook);
@@ -272,6 +279,8 @@ contract DeployHooks is Script {
         console2.log("ComplianceHook (deal)   ", dealHook);
         console2.log("ComplianceHook (invest) ", investorHook);
         console2.log("MandateHook             ", mandateHook);
+        console2.log("bootstrapLp (LP-only,   ", bootstrapLp);
+        console2.log("  empty pools only)      swaps are never exempt");
         console2.log("--- pool ---");
         console2.log("token0                  ", token0);
         console2.log("token1                  ", token1);
@@ -292,7 +301,8 @@ contract DeployHooks is Script {
             '  "dealHook": "', vm.toString(dealHook), '",\n',
             '  "investorHook": "', vm.toString(investorHook), '",\n',
             '  "mandateHook": "', vm.toString(mandateHook), '",\n',
-            '  "treasury": "', vm.toString(treasury), '",\n'
+            '  "treasury": "', vm.toString(treasury), '",\n',
+            '  "bootstrapLp": "', vm.toString(bootstrapLp), '",\n'
         );
         json = string.concat(
             json,
