@@ -117,6 +117,30 @@ export default function HeroPage() {
     refreshStatus();
   }, [refreshStatus]);
 
+  // Read the agent's live ENSIP-25 record + reputation, and keep retrying: the read RPC lags the write
+  // RPC after link-agent, so a single read right after creation often comes back empty.
+  useEffect(() => {
+    if (!agent) return;
+    let cancelled = false;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      const e = await readAgentEns(agent.ensName, agent.address).catch(() => null);
+      if (cancelled) return;
+      if (e) setAgentEns(e);
+      tries += 1;
+      // keep polling until registration resolves to "1" (or give up after ~10 tries)
+      if ((!e || e.registration !== '1') && tries < 10) {
+        timer = setTimeout(tick, 3000);
+      }
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [agent]);
+
   // Restore per-wallet state on connect (ENS name isn't reverse-resolvable, so we cache it) + read
   // the on-chain identity as a fallback.
   useEffect(() => {
@@ -196,8 +220,7 @@ export default function HeroPage() {
       setAgent(ag);
       addTx('linkAgent', r.txs.linkAgent);
       addTx('agent ENS + score', r.txs.bindEns);
-      const e = await readAgentEns(ag.ensName, ag.address).catch(() => null);
-      setAgentEns(e);
+      // The read RPC lags the write RPC — the polling effect below re-reads until it resolves.
     });
 
   /**
@@ -341,13 +364,40 @@ export default function HeroPage() {
             <span className="font-mono">{identity ? shortenAddress(identity) : '—'}</span>
           </p>
           {agent && (
-            <p className="text-[11px] text-[#8FA0C0] mt-1">
-              <span className="text-white font-semibold">{agent.ensName}</span> ·{' '}
-              <span className="font-mono">agent-registration</span> ={' '}
-              <span className="text-white">{agentEns?.registration ?? '—'}</span> ·{' '}
-              <span className="font-mono">reputation</span> ={' '}
-              <span className="text-white">{agentEns?.reputation ?? '—'}</span>
-            </p>
+            <div className="mt-4 rounded-xl border border-[#1E2D4D] bg-[#172040] p-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-sm font-bold text-white">{agent.ensName}</span>
+                {agentEns?.registration === '1' ? (
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#EAF7F0] text-[#0B7A4B] border border-[#B8E6CE]">
+                    ✓ ENSIP-25 verified agent
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-[#8FA0C0]">agent-registration —</span>
+                )}
+              </div>
+              <div className="flex items-center gap-5 mt-2">
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest text-[#8FA0C0]">Reputation</span>
+                  <p className="text-white font-bold text-lg leading-none mt-0.5">
+                    {agentEns?.reputation ?? '—'}
+                    <span className="text-[11px] font-normal text-[#8FA0C0]">/100</span>
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest text-[#8FA0C0]">
+                    agent-registration
+                  </span>
+                  <p className="text-white font-mono text-lg leading-none mt-0.5">
+                    {agentEns?.registration ?? '—'}
+                  </p>
+                </div>
+                <div className="text-[10px] text-[#8FA0C0] leading-tight">
+                  resolved live from
+                  <br />
+                  our ENS resolver (ENSIP-25)
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -430,16 +480,26 @@ export default function HeroPage() {
           </div>
         ))}
 
-      {/* Step 3 — accredited -> GREEN */}
+      {/* Step 3 — age 18+ (World Identity Check) -> GREEN */}
       {(status === 'LIMITED' || status === 'GREEN') &&
-        step(3, 'Add accredited (labeled mock) → passport GREEN', status === 'GREEN', (
-          <button
-            onClick={doAccredited}
-            disabled={busy === 'accredited' || status === 'GREEN'}
-            className="text-sm font-semibold px-4 py-2.5 rounded-lg bg-[#0D1428] text-white disabled:opacity-40 w-full"
-          >
-            {status === 'GREEN' ? '✓ Accredited' : busy === 'accredited' ? 'Submitting…' : 'Add accredited claim (mock)'}
-          </button>
+        step(3, 'Verify age 18+ (World Identity Check) → passport GREEN', status === 'GREEN', (
+          <div className="space-y-2">
+            <p className="text-xs text-[#4B5568]">
+              Document-backed <span className="font-semibold">18+</span> attestation via World Identity
+              Check.{' '}
+              <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                LABELED MOCK
+              </span>{' '}
+              — real World Identity Check needs a passport-verified World App.
+            </p>
+            <button
+              onClick={doAccredited}
+              disabled={busy === 'accredited' || status === 'GREEN'}
+              className="text-sm font-semibold px-4 py-2.5 rounded-lg bg-[#0D1428] text-white disabled:opacity-40 w-full"
+            >
+              {status === 'GREEN' ? '✓ 18+ verified' : busy === 'accredited' ? 'Submitting…' : 'Verify 18+ (mock)'}
+            </button>
+          </div>
         ))}
 
       {/* Step 4 — create agent */}

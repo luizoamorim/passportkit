@@ -9,7 +9,6 @@ import { PRODUCT_NAME } from '@/modules/passport/passport.constants';
 
 import { ChainChip, type DemoWorld } from './ChainChip';
 import { DemoBanner } from './DemoBanner';
-import { Nav } from './Nav';
 
 /**
  * The one frame every route renders inside: brand lockup, nav, chain chip,
@@ -191,8 +190,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <span className="font-bold text-[#0D1428] text-sm">{PRODUCT_NAME}</span>
             </Link>
-
-            <Nav demoEnabled={enabled !== false} />
 
             <div className="ml-auto flex items-center gap-3">
               <ChainChip world={world} />

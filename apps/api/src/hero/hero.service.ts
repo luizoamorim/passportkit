@@ -193,9 +193,10 @@ export class HeroService {
       this.logger.log(`gasDrip skipped for ${to} (balance ok)`);
       return null;
     }
-    const hash = await this.walletClient.sendTransaction({ to, value: DRIP_WEI });
-    await this.publicClient.waitForTransactionReceipt({ hash });
-    this.logger.log(`gasDrip ${to} txHash=${hash}`);
+    const hash = await this.sendWithRetry(
+      () => this.walletClient!.sendTransaction({ to, value: DRIP_WEI }),
+      `gasDrip ${to}`,
+    );
     return hash;
   }
 
@@ -206,16 +207,51 @@ export class HeroService {
     args: readonly unknown[],
   ): Promise<Hex> {
     if (!this.walletClient) throw new Error('AGENT_PRIVATE_KEY not configured');
-    const hash = await this.walletClient.writeContract({
-      address,
-      abi: abi as never,
-      functionName: functionName as never,
-      args: args as never,
-      gas: WRITE_GAS,
-    });
-    await this.publicClient.waitForTransactionReceipt({ hash });
-    this.logger.log(`${functionName} -> ${address} txHash=${hash}`);
-    return hash;
+    return this.sendWithRetry(
+      () =>
+        this.walletClient!.writeContract({
+          address,
+          abi: abi as never,
+          functionName: functionName as never,
+          args: args as never,
+          gas: WRITE_GAS,
+        }),
+      `${functionName} -> ${address}`,
+    );
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Send a tx, wait for its receipt, then pause before the caller sends the next one. The agent wallet
+   * is EIP-7702 delegated: the RPC allows only ONE in-flight tx per delegated account, so back-to-back
+   * sends throw "in-flight transaction limit reached for delegated accounts". We serialize (this is the
+   * `--slow` behaviour foundry needs) and retry that specific error with backoff so a fresh receipt has
+   * time to clear before the next send.
+   */
+  private async sendWithRetry(send: () => Promise<Hex>, label: string): Promise<Hex> {
+    const maxAttempts = 6;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const hash = await send();
+        await this.publicClient.waitForTransactionReceipt({ hash });
+        await this.delay(2000); // let the delegated account clear before the next tx
+        this.logger.log(`${label} txHash=${hash}`);
+        return hash;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const retryable = /in-flight|delegated|nonce|replacement transaction underpriced/i.test(msg);
+        if (retryable && attempt < maxAttempts) {
+          this.logger.warn(`${label} retry ${attempt}/${maxAttempts}: ${msg.slice(0, 90)}`);
+          await this.delay(4000);
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error(`${label} failed after ${maxAttempts} attempts`);
   }
 
   private normalizeLabel(label: string): string {
