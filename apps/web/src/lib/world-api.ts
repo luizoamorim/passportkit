@@ -41,14 +41,16 @@ export function requestWorldProof(kind: WorldKind): Promise<WorldRequestConfig> 
   });
 }
 
-/** Step 2: send the widget result to the backend, which validates it and signs the claim. */
+/** Step 2: send the widget result to the backend, which validates it and signs the claim.
+ *  `topicName` (DEMO_MODE only) maps the real proof to a chosen topic — e.g. Selfie Check -> KYC. */
 export function verifyWorldProof(
   identity: Address,
   kind: WorldKind,
   result: unknown,
+  topicName?: string,
 ): Promise<WorldSignedClaim> {
   return apiFetch<WorldSignedClaim>('/world/verify', {
     method: 'POST',
-    body: JSON.stringify({ identity, kind, result }),
+    body: JSON.stringify({ identity, kind, result, topicName }),
   });
 }

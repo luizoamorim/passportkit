@@ -6,10 +6,12 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
-    credentials: true,
-  });
+  // CORS_ORIGIN may be a comma-separated list (prod + Vercel preview domains).
+  const corsOrigin = (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: corsOrigin, credentials: true });
 
   app.useGlobalPipes(
     new ValidationPipe({
