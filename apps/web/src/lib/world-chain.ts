@@ -30,6 +30,7 @@ const RPC_URL =
 export const TOPICS = {
   PROOF_OF_PERSONHOOD: BigInt(keccak256(toHex('PROOF_OF_PERSONHOOD'))),
   KYC_VERIFIED: BigInt(keccak256(toHex('KYC_VERIFIED'))),
+  ACCREDITED_INVESTOR: BigInt(keccak256(toHex('ACCREDITED_INVESTOR'))),
 };
 
 const FACTORY_ABI = parseAbi(['function identityOfWallet(address) view returns (address)']);
