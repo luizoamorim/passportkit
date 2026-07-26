@@ -122,7 +122,7 @@ contract ComplianceHook is BaseHook {
 6. [ ] Keep scope to the hook — do **not** enter the API track ($7k).
 
 **Upgrade (only if the rest is done):**
-- [ ] Live deploy on **Ethereum Sepolia** via `HookMiner` + `CREATE2_DEPLOYER` (`0x4e59…4956C`) — confirm the Eth Sepolia `PoolManager` on the v4 deployments page.
+- [x] Live deploy on **Ethereum Sepolia** via `HookMiner` + `CREATE2_DEPLOYER` (`0x4e59…4956C`) — scripted in `contracts/script/DeployHooks.s.sol`, runbook + canonical `PoolManager` addresses in `docs/DEPLOYMENTS.md`. It deploys against an existing PassportKit stack (unlike `DeployAll.s.sol`, which builds a whole anvil world) and pre-checks the deployer's eligibility, because `beforeAddLiquidity` gates the deployer out of seeding its own pool.
 - [ ] `forge script` with a live swap → tx hash for the submission.
 
 **Avoid (rabbit hole):** a web swap UI (UniversalRouter + Permit2 + approvals). The revert is shown in the test/script.
