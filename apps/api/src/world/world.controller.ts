@@ -6,7 +6,9 @@ import { IssuerSigningService } from '../issuer/issuer-signing.service';
 import { CLAIM_TOPICS, type ClaimTopicName } from '../issuer/claim-topics';
 import { WorldService, type WorldKind, type WorldResult } from './world.service';
 
-/** kind -> the real claim topic it proves. */
+const TOPIC_NAMES = Object.keys(CLAIM_TOPICS);
+
+/** kind -> the real claim topic it proves (production default). */
 const TOPIC_FOR_KIND: Record<WorldKind, ClaimTopicName> = {
   selfie: 'PROOF_OF_PERSONHOOD',
   document: 'KYC_VERIFIED',
@@ -26,6 +28,13 @@ class WorldVerifyDto {
 
   @IsObject()
   result!: WorldResult; // the IDKitResult from the widget (Groth16 proof — never PII)
+
+  // DEMO ONLY: map the (still real) proof to a different topic than the kind's default. At the venue
+  // nobody has a passport-verified World App, so the demo files a real Selfie Check under KYC. Honored
+  // only in DEMO_MODE; production keeps the fixed kind->topic mapping.
+  @IsOptional()
+  @IsIn(TOPIC_NAMES)
+  topicName?: ClaimTopicName;
 
   @IsOptional()
   @IsObject()
@@ -59,7 +68,10 @@ export class WorldController {
   async verify(@Body() dto: WorldVerifyDto) {
     const verified = this.world.verifyResult(dto.kind, dto.result);
 
-    const topicName = TOPIC_FOR_KIND[dto.kind];
+    // Default: the kind's real topic. In DEMO_MODE the caller may map the (still real) proof to another
+    // topic — the venue has no passport-verified World App, so a real Selfie Check is filed under KYC.
+    const demoOverride = process.env.DEMO_MODE === 'true' && dto.topicName ? dto.topicName : undefined;
+    const topicName = demoOverride ?? TOPIC_FOR_KIND[dto.kind];
     // Sanitized reference: a hash of the flow + nullifier. NEVER PII, never the proof.
     const evidence = JSON.stringify({
       world: true,

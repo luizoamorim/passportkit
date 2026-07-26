@@ -12,6 +12,7 @@ import { IssuerModule } from './issuer/issuer.module';
 import { EligibilityModule } from './eligibility/eligibility.module';
 import { IdentityModule } from './identity/identity.module';
 import { WorldModule } from './world/world.module';
+import { HeroModule } from './hero/hero.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { WorldModule } from './world/world.module';
     EligibilityModule,
     IdentityModule,
     WorldModule,
+    HeroModule,
   ],
 })
 export class AppModule {}
