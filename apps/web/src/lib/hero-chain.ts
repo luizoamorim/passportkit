@@ -14,9 +14,15 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { getClaimValid, TOPICS } from './world-chain';
 
-/** Deployed on Sepolia (docs/DEPLOYMENTS.md). */
-const RESOLVER = '0x14a83c7aE0667e90ff3863C6eF12539F67e4Cd58' as Address;
-const GATED_TOKEN = '0xe3a29101263567c400A0d4d47C52912d3Ed0a08d' as Address;
+/**
+ * Deployed on Sepolia (docs/DEPLOYMENTS.md). Overridable so a redeployed stack is an env
+ * change, not a code edit — the API side is already fully env-driven, and these must agree
+ * with `PASSPORT_RESOLVER_ADDRESS` / `GATED_ERC20_ADDRESS` in the API's env.
+ */
+const RESOLVER = (process.env.NEXT_PUBLIC_PASSPORT_RESOLVER_ADDRESS ??
+  '0x14a83c7aE0667e90ff3863C6eF12539F67e4Cd58') as Address;
+const GATED_TOKEN = (process.env.NEXT_PUBLIC_GATED_ERC20_ADDRESS ??
+  '0xe3a29101263567c400A0d4d47C52912d3Ed0a08d') as Address;
 const RPC_URL =
   process.env.NEXT_PUBLIC_SEPOLIA_RPC ?? 'https://ethereum-sepolia-rpc.publicnode.com';
 

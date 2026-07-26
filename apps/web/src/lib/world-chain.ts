@@ -22,8 +22,12 @@ import { sepolia } from 'viem/chains';
  * then call Identity.submitClaim(topic, issuer, sig, data) from the user's wallet (window.ethereum).
  * Reads use a public RPC; writes use the injected wallet. Addresses: see docs/DEPLOYMENTS.md.
  */
-const IDENTITY_FACTORY = '0x23504699EAcc1842d01998C0D57C53a2CF1638A0' as Address;
-const CLAIM_ISSUER = '0x56F97734cC4d80af950538eAA6976398b5E58Fa9' as Address;
+/// Overridable so a redeployed stack is an env change, not a code edit — these must agree with
+/// `IDENTITY_FACTORY_ADDRESS` / `CLAIM_ISSUER_ADDRESS` in the API's env.
+const IDENTITY_FACTORY = (process.env.NEXT_PUBLIC_IDENTITY_FACTORY_ADDRESS ??
+  '0x23504699EAcc1842d01998C0D57C53a2CF1638A0') as Address;
+const CLAIM_ISSUER = (process.env.NEXT_PUBLIC_CLAIM_ISSUER_ADDRESS ??
+  '0x56F97734cC4d80af950538eAA6976398b5E58Fa9') as Address;
 const RPC_URL =
   process.env.NEXT_PUBLIC_SEPOLIA_RPC ?? 'https://ethereum-sepolia-rpc.publicnode.com';
 
