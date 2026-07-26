@@ -97,11 +97,15 @@ contract DeployPassportKit is Script {
         resolverAddr = address(resolver);
         subnamesAddr = address(new PassportSubnameRegistrar(nameWrapper, address(resolver), agentAddr));
 
-        // 5. ENS tenant wiring (only if a parent node is provided). Set-once for the demo:
-        //    controller = the registrar so it can bind subnames via resolver.setIdentity. The
-        //    tenant's gate/policy are not rotated afterwards (would need an admin path on the resolver).
+        // 5. ENS tenant wiring (only if a parent node is provided). setTenant is
+        //    first-come-first-served and NOT rotatable afterwards, so the controller choice is
+        //    permanent — pick it deliberately:
+        //      - agent EOA (default): the backend binds subnames directly via resolver.setIdentity.
+        //        This is what the /hero flow does, and it needs no ENS NameWrapper approval.
+        //      - the registrar: only usable once the ENS name owner has called
+        //        NameWrapper.setApprovalForAll(subnamesAddr, true) — a human step off this script.
         if (parentNode != bytes32(0)) {
-            resolver.setTenant(parentNode, address(gate), 1, subnamesAddr);
+            resolver.setTenant(parentNode, address(gate), 1, vm.envOr("ENS_TENANT_CONTROLLER", agentAddr));
         }
 
         startBlock = block.number;

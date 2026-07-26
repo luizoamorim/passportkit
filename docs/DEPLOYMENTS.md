@@ -1,6 +1,131 @@
 # Deployments
 
-## Ethereum Sepolia (chainId 11155111)
+## Ethereum Sepolia — THE STACK (redeployed 2026-07-26, chainId 11155111)
+
+Deployed from scratch so **one key owns every role**: admin, agent, issuer signer, minter, scorer
+and ENS tenant controller are all
+`0x8368c1EAEad096124665E80D68eD0e763c242dC8` (startBlock **11352168**). No dependency on any
+other key holder — the backend can create identities, sign claims, link agents, mint, score and
+**revoke** on its own. Every contract verified on Etherscan. 13.1M gas across both scripts.
+
+| Contract | Address |
+|---|---|
+| IssuerRegistry | [`0xCFc0b7Cf6B877d3F80A57123b85ba7D9f4c965e1`](https://sepolia.etherscan.io/address/0xCFc0b7Cf6B877d3F80A57123b85ba7D9f4c965e1) |
+| ClaimIssuer | [`0x997FfC7e02f405deF917d28481A4B5Da0b356d29`](https://sepolia.etherscan.io/address/0x997FfC7e02f405deF917d28481A4B5Da0b356d29) |
+| EligibilityGate | [`0x44d96CCa9BF17deF6E2BF6D00dbF2Ee5eee06998`](https://sepolia.etherscan.io/address/0x44d96CCa9BF17deF6E2BF6D00dbF2Ee5eee06998) |
+| IdentityFactory | [`0x3c8315ed76bc95cD009B96516e6c6d60145f9c96`](https://sepolia.etherscan.io/address/0x3c8315ed76bc95cD009B96516e6c6d60145f9c96) |
+| GatedERC20 | [`0xED7c73f2E57aBFF6919eE6bf76F6b0b5361eBb43`](https://sepolia.etherscan.io/address/0xED7c73f2E57aBFF6919eE6bf76F6b0b5361eBb43) |
+| ScoreRegistry | [`0x73c51043524a84C375Adb710c40dfF6544E6Ea59`](https://sepolia.etherscan.io/address/0x73c51043524a84C375Adb710c40dfF6544E6Ea59) |
+| PassportResolver | [`0xB31f41e8258fFb3B8Ab0d0c0FB131516A16271ce`](https://sepolia.etherscan.io/address/0xB31f41e8258fFb3B8Ab0d0c0FB131516A16271ce) |
+| PassportSubnameRegistrar | [`0xFeF9199F4c3CfDE5F11304b4EBc3784542F3481a`](https://sepolia.etherscan.io/address/0xFeF9199F4c3CfDE5F11304b4EBc3784542F3481a) |
+
+**Uniswap v4** — ComplianceHook pools on the canonical PoolManager
+`0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`, both reading the gate above:
+
+| Contract | Address |
+|---|---|
+| ComplianceHook — policy #1 Deal Room | [`0x6C12292FB54B27C2F6DE632276976418af5F4880`](https://sepolia.etherscan.io/address/0x6C12292FB54B27C2F6DE632276976418af5F4880) |
+| ComplianceHook — policy #2 Investor | [`0x87A2483F1ADD5e3C03C74Dc281675E6B394f8880`](https://sepolia.etherscan.io/address/0x87A2483F1ADD5e3C03C74Dc281675E6B394f8880) |
+| mUSDC (token0) | [`0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA`](https://sepolia.etherscan.io/address/0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA) |
+| mCASA (token1) | [`0x77Cb80742E424E688A8AE5214000b9af7Ad7C384`](https://sepolia.etherscan.io/address/0x77Cb80742E424E688A8AE5214000b9af7Ad7C384) |
+| PoolSwapTest (swap router) | [`0xb02860dF9D8757Bf4649c067C278e77c62E1D911`](https://sepolia.etherscan.io/address/0xb02860dF9D8757Bf4649c067C278e77c62E1D911) |
+| DemoPositionRouter (liquidity) | [`0x0061c82bAB6bcF11087E9B6C32C42a910Ce5e9a6`](https://sepolia.etherscan.io/address/0x0061c82bAB6bcF11087E9B6C32C42a910Ce5e9a6) |
+
+| Pool | poolId | liquidity |
+|---|---|---|
+| Deal Room (KYC) | `0x8dcb9576689d61f45fbe7dda55cd88218200cd8c59b46fcccb8311fd2afcd88d` | 10,000e18 |
+| Investor (KYC + accredited) | `0x47f214750b178afa1039d06dc2b1d3bdc908bdaf55f570a4efe023d8101bc223` | 10,000e18 |
+
+Policies: `#1 Deal Room = [KYC_VERIFIED]`, `#2 Investor = [KYC_VERIFIED, ACCREDITED_INVESTOR]`.
+`bootstrapLp` on both hooks = the deployer (add-liquidity only, empty pools only — see
+"Bootstrapping a gated pool" below).
+
+**ENS tenant** for `casaazul.eth`
+(`namehash 0xc370deff09f061063f964c6329b0e2f76e18e210a00f5db98003d4ed686815b7`) is wired on the new
+PassportResolver with **controller = the agent EOA**, not the registrar — so the backend binds
+`<name>.casaazul.eth` directly via `resolver.setIdentity`, with no ENS NameWrapper approval step.
+`setTenant` is first-come-first-served and not rotatable, so that choice is permanent.
+
+### Environment
+
+`apps/api/.env`:
+
+```bash
+CHAIN_ID=11155111
+RPC_URL=https://eth-sepolia.g.alchemy.com/v2/<key>
+DEMO_MODE=true
+
+# one key: admin + agent + issuer signer + minter + scorer + ENS controller
+ISSUER_SIGNER_PRIVATE_KEY=0x…      # the 0x8368… key
+AGENT_PRIVATE_KEY=0x…              # same key
+
+CLAIM_ISSUER_ADDRESS=0x997FfC7e02f405deF917d28481A4B5Da0b356d29
+IDENTITY_FACTORY_ADDRESS=0x3c8315ed76bc95cD009B96516e6c6d60145f9c96
+PASSPORT_RESOLVER_ADDRESS=0xB31f41e8258fFb3B8Ab0d0c0FB131516A16271ce
+SCORE_REGISTRY_ADDRESS=0x73c51043524a84C375Adb710c40dfF6544E6Ea59
+GATED_ERC20_ADDRESS=0xED7c73f2E57aBFF6919eE6bf76F6b0b5361eBb43
+ENS_PARENT_NAME=casaazul.eth
+
+# World ID v4
+WORLD_APP_ID=app_…
+WORLD_RP_ID=rp_…
+WORLD_RP_SIGNING_KEY=0x…
+WORLD_ACTION_PERSONHOOD=passportkit-personhood
+WORLD_ACTION_KYC=passportkit-kyc
+```
+
+`apps/web/.env.local` — the four address vars are **required**, because the defaults compiled into
+`lib/world-chain.ts` and `lib/hero-chain.ts` still point at the old stack:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_WORLD_ENV=production
+NEXT_PUBLIC_PRIVY_APP_ID=…
+NEXT_PUBLIC_SEPOLIA_RPC=https://eth-sepolia.g.alchemy.com/v2/<key>
+
+NEXT_PUBLIC_IDENTITY_FACTORY_ADDRESS=0x3c8315ed76bc95cD009B96516e6c6d60145f9c96
+NEXT_PUBLIC_CLAIM_ISSUER_ADDRESS=0x997FfC7e02f405deF917d28481A4B5Da0b356d29
+NEXT_PUBLIC_PASSPORT_RESOLVER_ADDRESS=0xB31f41e8258fFb3B8Ab0d0c0FB131516A16271ce
+NEXT_PUBLIC_GATED_ERC20_ADDRESS=0xED7c73f2E57aBFF6919eE6bf76F6b0b5361eBb43
+```
+
+### Reproduce
+
+```bash
+cd contracts
+export RPC_URL=… DEPLOYER_PRIVATE_KEY=0x… ETHERSCAN_API_KEY=…
+export ENS_PARENT_NODE=0xc370deff09f061063f964c6329b0e2f76e18e210a00f5db98003d4ed686815b7
+
+forge script script/DeployPassportKit.s.sol --rpc-url $RPC_URL --broadcast --verify   # stack
+# then, with the gate + factory it printed:
+ELIGIBILITY_GATE_ADDRESS=… IDENTITY_FACTORY_ADDRESS=… SEED_LIQUIDITY=true \
+  forge script script/DeployHooks.s.sol --rpc-url $RPC_URL --broadcast --verify       # hooks + pools
+```
+
+`AGENT_ADDRESS` / `ISSUER_SIGNER_ADDRESS` default to the deployer, which is what makes one key own
+everything. `ENS_TENANT_CONTROLLER` defaults to that agent address.
+
+### Still to deploy on Sepolia
+
+`HouseTreasury` + CASA + `MandateHook` + the house pool (the `/concierge` rail), and the demo
+actors' identities + claims. Both exist only inside `DeployAll.s.sol`, which builds an anvil world
+from scratch; it needs a mode that reuses the stack above.
+
+### Superseded — the previous stack (do not use)
+
+The first Sepolia stack (admin/agent/signer `0xEc98…`) and the two hook generations pointing at it
+are dead for our purposes: we hold none of its roles, and its `casaazul.eth` tenant is claimed by a
+controller we do not control. Old identity stack: ClaimIssuer `0x56F9…`, IdentityFactory `0x2350…`,
+EligibilityGate `0x5157…`, GatedERC20 `0xe3a2…`, ScoreRegistry `0x010c…`, PassportResolver (demo)
+`0x14a83c7a…`. Old hooks: `0xfA1df80d…`/`0x7072E2b3…` (no bootstrap LP, unusable) and
+`0x9296d270…`/`0x38161b21…` (pointing at the old gate). The failed-swap artifact
+[`0xc1b5f813…`](https://sepolia.etherscan.io/tx/0xc1b5f8130ed1627732c2a5a55a6cb23f34ea5c236214d0516a3f66bd7f51992d)
+was produced against `0x9296d270…` and remains a valid demonstration of the mechanism, but the
+current pools are the ones above.
+
+---
+
+## Ethereum Sepolia — the FIRST stack (2026-07-25, superseded)
 
 Deployed 2026-07-25 (startBlock **11350114**). Admin / agent / issuer-signer = `0xEc98B58F86a32aAd7B32E17f292e6B640487f2A4`.
 
