@@ -1,0 +1,9 @@
+# Railway builds the API from the repo root (the Dockerfile COPYs the whole workspace,
+# so the build context must be the repo root — hence this file lives here, not in apps/api).
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/api/Dockerfile"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

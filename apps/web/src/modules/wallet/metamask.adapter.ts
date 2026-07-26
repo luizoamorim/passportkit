@@ -4,12 +4,10 @@ import type { WalletAdapter } from './wallet.types';
 
 declare global {
   interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      isMetaMask?: boolean;
-      on: (event: string, handler: (...args: unknown[]) => void) => void;
-      removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
-    };
+    // Typed as `any` to stay compatible with the ambient `window.ethereum` declaration that viem/wagmi
+    // ships (TS requires subsequent global declarations to share the same type).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ethereum?: any;
   }
 }
 
