@@ -30,12 +30,19 @@ access across every surface at once (the demo's hero is the **refusal**).
 
 - **Selfie Check:** we need *live personhood* to stop one human spawning many agents / sybils. We request
   the minimum — a live-person credential. We never receive an image or biometric; only a nullifier.
-- **Identity Check:** for the Deal Room we need a **document-backed eligibility signal**, and the most
-  minimal one that satisfies it is **`minimum_age: 18`** — a yes/no derived from a verified government
-  document. We deliberately do **not** request `full_name`, `document_number`, `issuing_country`, or
-  `nationality`. World attests the predicate; we learn nothing else.
+- **Identity Check — why `minimum_age: 18`:** Casa Azul's Deal Room is an **investment** surface, so the
+  minimal eligibility signal we need is *legal age to invest*. World ID attests a document-backed
+  **18+ yes/no** derived from a verified government document. We deliberately do **not** request
+  `full_name`, `document_number`, `issuing_country`, or `nationality` — World attests the predicate and
+  we learn nothing else.
 - **On-chain:** the claim `data` is `keccak256({ world, kind, nullifier })` — a hash. **Zero PII** is
   stored or written on-chain. The nullifier is a per-app pseudonym, not an identifier.
+- **Data erasure (GDPR Art. 17 / LGPD) — sidestepped by design:** because we **never receive or store any
+  PII**, there is nothing to erase — the right-to-be-forgotten becomes a non-problem rather than a process.
+  This matters doubly on-chain, where data is **immutable** and PII could never be deleted (putting PII
+  on-chain would itself be a compliance trap). World ID is what makes this possible: it proves the
+  attribute (18+, personhood) without transferring the underlying document data. *(This is
+  verification-time privacy — distinct from revocation, which is the enforcement / loss-of-access moment.)*
 
 ---
 
