@@ -55,6 +55,68 @@ Next: in the ENSv2 app set `casaazul.eth`'s resolver → the DEMO PassportResolv
 
 ---
 
+## Uniswap v4 hooks — LIVE on Ethereum Sepolia (2026-07-26)
+
+Deployed by `0x8368c1EAEad096124665E80D68eD0e763c242dC8`, **all four contracts verified on
+Etherscan**. 3.64M gas, ~0.0093 ETH at 2.55 gwei.
+
+| Contract | Address | |
+|---|---|---|
+| **ComplianceHook** — policy #1 Deal Room | [`0xfA1df80d0f8Df129Df0CB6EdBF3aDA2f36544880`](https://sepolia.etherscan.io/address/0xfA1df80d0f8Df129Df0CB6EdBF3aDA2f36544880) | verified |
+| **ComplianceHook** — policy #2 Investor | [`0x7072E2b3e95caA88863857cD9E7941b8DF21c880`](https://sepolia.etherscan.io/address/0x7072E2b3e95caA88863857cD9E7941b8DF21c880) | verified |
+| mUSD (token0) | [`0x282B09c5f932D28caA086863d4bA78A4935db967`](https://sepolia.etherscan.io/address/0x282B09c5f932D28caA086863d4bA78A4935db967) | verified |
+| PROP (token1) | [`0x67FB48B3Bdc0fc9d744dF3d9a7933d15b879b2bE`](https://sepolia.etherscan.io/address/0x67FB48B3Bdc0fc9d744dF3d9a7933d15b879b2bE) | verified |
+
+Both hook addresses end in **`0880`** — the low 14 bits are
+`BEFORE_ADD_LIQUIDITY_FLAG | BEFORE_SWAP_FLAG`, which is what makes them valid v4 hooks. Both read
+the live `EligibilityGate` `0x51574D58…` and `IdentityFactory` `0x23504699…`; neither carries any
+eligibility logic of its own.
+
+Pools on the canonical PoolManager `0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`, mUSD/PROP,
+fee 3000, tickSpacing 60, initialized at 1:1:
+
+| Pool | poolId | liquidity |
+|---|---|---|
+| Deal Room | `0x86236cd33660e6af718bc9e17390c2df2c96f2964307b9dc8dcdd712df71d2de` | 0 |
+| Investor | `0xfe72b0f15e2cb85fc0d1dc5b235eeac3ef7ccb76e9701edf4584c4c9f1b413a9` | 0 |
+
+Deploy transactions:
+
+| What | Tx |
+|---|---|
+| ComplianceHook (deal), CREATE2 | [`0x38afb8d8…`](https://sepolia.etherscan.io/tx/0x38afb8d87f349ed3008fd44a38fa2d0e091c74bcd5aa0345b2170635684b0bf0) |
+| ComplianceHook (investor), CREATE2 | [`0xa5c212cd…`](https://sepolia.etherscan.io/tx/0xa5c212cd0bfb7dc63e3046b8812050084d5fb8eb4c46a446873827eb7fd08f73) |
+| PoolManager.initialize (deal) | [`0xb274eb3e…`](https://sepolia.etherscan.io/tx/0xb274eb3ec65f3a77287598d874610c75ee2f4c2967fec4dd16ba62c3691ed73f) |
+| PoolManager.initialize (investor) | [`0xffe38f06…`](https://sepolia.etherscan.io/tx/0xffe38f06e86d084feb69ef929695f59d25f83d9a069056e19b8d626f7de01f79) |
+
+### The gate answering live, on a public chain
+
+```bash
+H=0xfA1df80d0f8Df129Df0CB6EdBF3aDA2f36544880
+RPC=https://ethereum-sepolia-rpc.publicnode.com
+cast call $H "reasonFor(address)(bytes32)" 0x8368c1EAEad096124665E80D68eD0e763c242dC8 --rpc-url $RPC
+#   -> NO_IDENTITY   (a wallet the IdentityFactory has never seen)
+cast call $H "reasonFor(address)(bytes32)" 0xEc98B58F86a32aAd7B32E17f292e6B640487f2A4 --rpc-url $RPC
+#   -> MISSING_KYC   (has an identity; the issuer's revocation latch is ON)
+```
+
+That second answer is the whole thesis in one call: the same latch that makes
+`luiz.casaazul.eth` resolve `REVOKED` also makes the Uniswap pool refuse. One revocation, every
+surface.
+
+### Still to do on Sepolia
+
+Liquidity is 0 in both pools, so the **green path can't be shown on Sepolia yet** — the refusal
+path works today. `beforeAddLiquidity` consults the same gate, and no wallet currently passes:
+`0x8368…` has no identity, and the only identity that exists (`0xD2AD5CeB…`) is KYC-latched. Needs
+one action from the `0xEc98…` key holder — either clear the latch and LP as `0xEc98…`, or
+`createIdentity(0x8368…)` plus a signed KYC + accredited claim. Then re-run with
+`SEED_LIQUIDITY=true`.
+
+`MandateHook` is not deployed here: it needs a `HouseTreasury`, which is anvil-only so far.
+
+---
+
 ## Uniswap v4 hooks — deploying to Sepolia
 
 `DeployAll.s.sol` builds a whole world from nothing and is anvil-only. For a chain where the
