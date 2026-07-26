@@ -314,26 +314,38 @@ export interface RawLog {
   topics: Hex[];
 }
 
+/**
+ * How many blocks one eth_getLogs may span. Anvil has no limit, but public Sepolia RPCs do
+ * and they disagree: Alchemy's free tier caps the range at 10 blocks, and non-archive nodes
+ * refuse a fromBlock older than their retention window entirely. Scanning deployBlock->latest
+ * in a single request therefore fails on every free endpoint, so the scan is paged.
+ * Raise it with RPC_LOG_CHUNK on an RPC that allows wider ranges — fewer round-trips.
+ */
+const LOG_CHUNK = BigInt(process.env.RPC_LOG_CHUNK ?? 10);
+
 /// Incremental eth_getLogs over the PoolManager's ModifyLiquidity + Swap events —
-/// the source for pool liquidity, per-actor positions and last price.
+/// the source for pool liquidity, per-actor positions and last price. Paged (see LOG_CHUNK)
+/// and cached, so only blocks produced since the last call are ever fetched.
 export async function refreshLogs(): Promise<RawLog[]> {
   const A = addresses();
   const cache = (state.logCache ??= { nextBlock: BigInt(A.deployBlock ?? 0), logs: [] });
   const latest = await publicClient.getBlockNumber({ cacheTime: 0 });
-  if (latest >= cache.nextBlock) {
+
+  while (cache.nextBlock <= latest) {
+    const to = cache.nextBlock + LOG_CHUNK - 1n < latest ? cache.nextBlock + LOG_CHUNK - 1n : latest;
     const fresh = await publicClient.request({
       method: 'eth_getLogs',
       params: [
         {
           fromBlock: toHex(cache.nextBlock),
-          toBlock: toHex(latest),
+          toBlock: toHex(to),
           address: A.poolManager,
           topics: [[MODIFY_LIQUIDITY_TOPIC, SWAP_TOPIC]],
         },
       ],
     } as never);
     cache.logs.push(...(fresh as unknown as RawLog[]));
-    cache.nextBlock = latest + 1n;
+    cache.nextBlock = to + 1n; // advance even on an empty page, so we never re-scan
   }
   return cache.logs;
 }
