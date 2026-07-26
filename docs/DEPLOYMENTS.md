@@ -108,8 +108,44 @@ everything. `ENS_TENANT_CONTROLLER` defaults to that agent address.
 ### Still to deploy on Sepolia
 
 `HouseTreasury` + CASA + `MandateHook` + the house pool (the `/concierge` rail), and the demo
-actors' identities + claims. Both exist only inside `DeployAll.s.sol`, which builds an anvil world
-from scratch; it needs a mode that reuses the stack above.
+actors' identities + claims. Both live in `DeployAll.s.sol`, which now has a **reuse mode**: every
+piece above is taken from env when set and deployed fresh when unset, so a Sepolia run adds only
+what is missing. It is idempotent on what it reuses — identities that exist are not re-created,
+claims that still verify are not re-signed, policies that already match are not re-wired, pools
+that are already initialized are not re-initialized.
+
+```bash
+cd contracts
+export RPC_URL=… ETHERSCAN_API_KEY=…
+
+# the operator is admin + issuer signer + LP, so it must be the 0x8368… key
+export OPERATOR_PK=0x…                                          # 0x8368c1EAEad096124665E80D68eD0e763c242dC8
+export ANA_PK=0x… RUI_PK=0x… CONCIERGE_PK=0x… PLUMBER_PK=0x…    # fresh demo EOAs; the operator drips them gas
+
+export ISSUER_REGISTRY=0xCFc0b7Cf6B877d3F80A57123b85ba7D9f4c965e1
+export CLAIM_ISSUER=0x997FfC7e02f405deF917d28481A4B5Da0b356d29
+export IDENTITY_FACTORY=0x3c8315ed76bc95cD009B96516e6c6d60145f9c96
+export ELIGIBILITY_GATE=0x44d96CCa9BF17deF6E2BF6D00dbF2Ee5eee06998
+export POOL_MANAGER=0xE03A1074c86CFeDd5C142C4F04F1a1536e203543
+export TOKEN_A=0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA        # mUSDC
+export TOKEN_B=0x77Cb80742E424E688A8AE5214000b9af7Ad7C384        # mCASA
+export SPEND_TOKEN=0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA    # the house settles in mUSDC
+export DEAL_HOOK=0x6C12292FB54B27C2F6DE632276976418af5F4880
+export INVESTOR_HOOK=0x87A2483F1ADD5e3C03C74Dc281675E6B394f8880
+
+forge script script/DeployAll.s.sol --rpc-url $RPC_URL                              # dry run first
+forge script script/DeployAll.s.sol --rpc-url $RPC_URL --broadcast --slow --verify  # then for real
+```
+
+**`--slow` is not optional here.** The operator drips ETH to the actor wallets and those wallets
+then sign their own transactions (Model B: ana submits her own claim, every actor sets its own
+approvals). Without `--slow` those transactions can reach the node before the drip that funds them
+is mined, and get rejected for insufficient funds. `ACTOR_ETH_WEI` sets the per-actor floor
+(default `0.02 ether`; the drip tops up to it, so a re-run does not re-send).
+
+The run writes `apps/web/demo-addresses.json` — the single file `/markets` and `/concierge` read.
+Its `deployBlock` is the block of *this* run, so the liquidity DeployHooks seeded earlier is
+outside the page's log scan; the pools show only the depth this run adds.
 
 ### Superseded — the previous stack (do not use)
 
