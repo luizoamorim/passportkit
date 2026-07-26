@@ -44,7 +44,6 @@ export default function HeroPage() {
   const [ensName, setEnsName] = useState<string | null>(null);
   const [ensStatus, setEnsStatus] = useState<string>('—');
   const [status, setStatus] = useState<PassportStatus>('NONE');
-  const [personhood, setPersonhood] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentEns, setAgentEns] = useState<{ registration: string; reputation: string } | null>(null);
   const [casaOk, setCasaOk] = useState<string | null>(null);
@@ -71,11 +70,33 @@ export default function HeroPage() {
     refreshStatus();
   }, [refreshStatus]);
 
-  // Resolve an existing identity when a wallet connects (so re-runs pick up prior state).
+  // Restore per-wallet state on connect (ENS name isn't reverse-resolvable, so we cache it) + read
+  // the on-chain identity as a fallback.
   useEffect(() => {
     if (!wallet) return;
+    try {
+      const raw = localStorage.getItem(`hero:${wallet}`);
+      if (raw) {
+        const s = JSON.parse(raw) as { identity?: Address; ensName?: string; agent?: Agent };
+        if (s.identity) setIdentity(s.identity);
+        if (s.ensName) setEnsName(s.ensName);
+        if (s.agent) setAgent(s.agent);
+      }
+    } catch {
+      /* ignore */
+    }
     getIdentity(wallet).then((id) => id && setIdentity(id)).catch(() => {});
   }, [wallet]);
+
+  // Persist so a refresh keeps identity / ENS / agent (agent key is a demo throwaway).
+  useEffect(() => {
+    if (!wallet) return;
+    try {
+      localStorage.setItem(`hero:${wallet}`, JSON.stringify({ identity, ensName, agent }));
+    } catch {
+      /* ignore */
+    }
+  }, [wallet, identity, ensName, agent]);
 
   async function run<T>(key: string, fn: () => Promise<T>): Promise<T | undefined> {
     setBusy(key);
@@ -240,11 +261,11 @@ export default function HeroPage() {
         </div>
       ))}
 
-      {/* Step 2 — identity + World KYC -> LIMITED */}
+      {/* Step 2 — identity + live ENS + World Selfie Check -> KYC -> LIMITED */}
       {wallet &&
         step(2, 'Verify identity (World ID) → passport LIMITED', status === 'LIMITED' || status === 'GREEN', (
           <div className="space-y-3">
-            {!identity ? (
+            {!ensName ? (
               <div className="flex gap-2 flex-wrap items-center">
                 <input
                   value={label}
@@ -257,25 +278,45 @@ export default function HeroPage() {
                   disabled={!label || busy === 'provision'}
                   className="text-sm font-semibold px-4 py-2 rounded-lg bg-[#0D1428] text-white disabled:opacity-40"
                 >
-                  {busy === 'provision' ? 'Generating…' : 'Generate identity + ENS'}
+                  {busy === 'provision' ? 'Generating… (~45s on Sepolia)' : 'Generate identity + ENS'}
                 </button>
               </div>
             ) : (
               <p className="text-xs text-[#4B5568]">
-                Identity ready as <span className="font-semibold">{ensName}</span>. Now prove it with World ID.
+                Identity ready as <span className="font-semibold">{ensName}</span>. Now prove you&apos;re a
+                real, live human with World ID — Casa Azul accepts it as your onboarding signal.
               </p>
             )}
-            {identity && (
-              <HeroWorldButton
-                kind="document"
-                wallet={wallet}
-                identity={identity}
-                label={label}
-                onDone={(h) => {
-                  addTx('KYC claim (World)', h);
-                  refreshStatus();
-                }}
-              />
+            {identity && ensName && (
+              <div className="space-y-2">
+                <HeroWorldButton
+                  kind="selfie"
+                  wallet={wallet}
+                  identity={identity}
+                  label={label}
+                  topicName="KYC_VERIFIED"
+                  onDone={(h) => {
+                    addTx('KYC via Selfie Check (World)', h);
+                    refreshStatus();
+                  }}
+                />
+                <details className="text-[11px] text-[#9CA3AF]">
+                  <summary className="cursor-pointer">Have a passport-verified World App? Use Identity Check instead</summary>
+                  <div className="mt-2">
+                    <HeroWorldButton
+                      kind="document"
+                      wallet={wallet}
+                      identity={identity}
+                      label={label}
+                      topicName="KYC_VERIFIED"
+                      onDone={(h) => {
+                        addTx('KYC via Identity Check (World)', h);
+                        refreshStatus();
+                      }}
+                    />
+                  </div>
+                </details>
+              </div>
             )}
           </div>
         ))}
@@ -292,25 +333,9 @@ export default function HeroPage() {
           </button>
         ))}
 
-      {/* Step 4 — personhood */}
-      {identity &&
-        (status === 'LIMITED' || status === 'GREEN') &&
-        step(4, 'Prove personhood (World Selfie Check)', personhood, (
-          <HeroWorldButton
-            kind="selfie"
-            wallet={wallet!}
-            identity={identity}
-            label={label}
-            onDone={(h) => {
-              addTx('personhood claim (World)', h);
-              setPersonhood(true);
-            }}
-          />
-        ))}
-
-      {/* Step 5 — create agent */}
-      {personhood &&
-        step(5, 'Delegate to an agent (new wallet, inherits your identity)', !!agent, (
+      {/* Step 4 — create agent */}
+      {status === 'GREEN' &&
+        step(4, 'Delegate to an agent (new wallet, inherits your identity)', !!agent, (
           <div className="space-y-2">
             {!agent ? (
               <button
@@ -331,7 +356,7 @@ export default function HeroPage() {
 
       {/* Step 6 — Casa Azul liquidity */}
       {agent &&
-        step(6, 'Casa Azul liquidity — your agent acts', !!casaOk, (
+        step(5, 'Casa Azul liquidity — your agent acts', !!casaOk, (
           <div className="space-y-2">
             <p className="text-xs text-[#4B5568]">
               The agent moves Casa Azul&apos;s compliant token (GatedERC20). The gate resolves the
@@ -354,7 +379,7 @@ export default function HeroPage() {
 
       {/* Step 7 + 8 — the money moment */}
       {casaOk &&
-        step(7, 'The money moment — revoke the human', status === 'REVOKED', (
+        step(6, 'The money moment — revoke the human', status === 'REVOKED', (
           <div className="space-y-3">
             <button
               onClick={doRevoke}

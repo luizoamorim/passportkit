@@ -28,6 +28,7 @@ export function HeroWorldButton({
   identity,
   disabled,
   label,
+  topicName,
   onDone,
 }: {
   kind: WorldKind;
@@ -35,6 +36,7 @@ export function HeroWorldButton({
   identity: Address;
   disabled?: boolean;
   label: string;
+  topicName?: string; // DEMO_MODE: map the real proof to this topic (e.g. Selfie Check -> KYC)
   onDone: (txHash: string) => void;
 }) {
   const [phase, setPhase] = useState<Phase>('idle');
@@ -45,7 +47,7 @@ export function HeroWorldButton({
   async function complete(result: unknown) {
     try {
       setPhase('verifying');
-      const claim = await verifyWorldProof(identity, kind, result);
+      const claim = await verifyWorldProof(identity, kind, result, topicName);
       setPhase('submitting');
       const provider = await getProvider();
       const txHash = await submitClaim({
