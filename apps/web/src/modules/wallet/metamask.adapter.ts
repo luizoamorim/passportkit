@@ -2,23 +2,31 @@
 
 import type { WalletAdapter } from './wallet.types';
 
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      isMetaMask?: boolean;
-      on: (event: string, handler: (...args: unknown[]) => void) => void;
-      removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
-    };
-  }
+/**
+ * `window.ethereum` is already declared globally as `any` by @privy-io/react-auth, and merged
+ * interface declarations must agree — a second `declare global` here is a compile error
+ * (TS2717) that also fails `next build`. So keep the shape local and cast at the boundary,
+ * the same way lib/useEthProvider.ts and lib/world-chain.ts already do.
+ */
+interface InjectedProvider {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  isMetaMask?: boolean;
+  on: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+}
+
+function injected(): InjectedProvider | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return (window as unknown as { ethereum?: InjectedProvider }).ethereum;
 }
 
 export const metamaskAdapter: WalletAdapter = {
   async connectWallet(): Promise<string> {
-    if (typeof window === 'undefined' || !window.ethereum) {
+    const ethereum = injected();
+    if (!ethereum) {
       throw new Error('MetaMask not found. Please install the MetaMask extension.');
     }
-    const accounts = (await window.ethereum.request({
+    const accounts = (await ethereum.request({
       method: 'eth_requestAccounts',
     })) as string[];
     if (!accounts || accounts.length === 0) {
@@ -28,9 +36,10 @@ export const metamaskAdapter: WalletAdapter = {
   },
 
   async getConnectedWallet(): Promise<string | null> {
-    if (typeof window === 'undefined' || !window.ethereum) return null;
+    const ethereum = injected();
+    if (!ethereum) return null;
     try {
-      const accounts = (await window.ethereum.request({
+      const accounts = (await ethereum.request({
         method: 'eth_accounts',
       })) as string[];
       return accounts?.[0] ?? null;
@@ -40,12 +49,13 @@ export const metamaskAdapter: WalletAdapter = {
   },
 
   onAccountsChanged(callback: (address: string | null) => void): () => void {
-    if (typeof window === 'undefined' || !window.ethereum) return () => {};
+    const ethereum = injected();
+    if (!ethereum) return () => {};
     const handler = (accounts: unknown) => {
       const list = accounts as string[];
       callback(list.length > 0 ? list[0] : null);
     };
-    window.ethereum.on('accountsChanged', handler);
-    return () => window.ethereum?.removeListener('accountsChanged', handler);
+    ethereum.on('accountsChanged', handler);
+    return () => ethereum.removeListener('accountsChanged', handler);
   },
 };
