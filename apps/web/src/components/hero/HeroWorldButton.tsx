@@ -5,6 +5,7 @@ import { IDKitRequestWidget, selfieCheckLegacy, identityCheck } from '@worldcoin
 import type { Address } from 'viem';
 import { requestWorldProof, verifyWorldProof, type WorldKind, type WorldRequestConfig } from '@/lib/world-api';
 import { submitClaim } from '@/lib/world-chain';
+import { useEthProvider } from '@/lib/useEthProvider';
 
 const WORLD_ENV = (process.env.NEXT_PUBLIC_WORLD_ENV ?? 'production') as
   | 'production'
@@ -39,12 +40,14 @@ export function HeroWorldButton({
   const [phase, setPhase] = useState<Phase>('idle');
   const [config, setConfig] = useState<WorldRequestConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const getProvider = useEthProvider();
 
   async function complete(result: unknown) {
     try {
       setPhase('verifying');
       const claim = await verifyWorldProof(identity, kind, result);
       setPhase('submitting');
+      const provider = await getProvider();
       const txHash = await submitClaim({
         wallet,
         identity,
@@ -52,6 +55,7 @@ export function HeroWorldButton({
         issuer: claim.issuer,
         signature: claim.signature,
         data: claim.data,
+        provider,
       });
       setPhase('done');
       onDone(txHash);

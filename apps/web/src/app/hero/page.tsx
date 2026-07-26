@@ -19,6 +19,7 @@ import {
   agentTransfer,
   type PassportStatus,
 } from '@/lib/hero-chain';
+import { useEthProvider } from '@/lib/useEthProvider';
 import { shortenAddress } from '@/lib/format';
 
 const SEP = 'https://sepolia.etherscan.io/tx/';
@@ -36,6 +37,7 @@ const STATUS_STYLE: Record<PassportStatus, string> = {
 export default function HeroPage() {
   const { address } = useWallet();
   const wallet = (address ?? null) as Address | null;
+  const getProvider = useEthProvider();
 
   const [label, setLabel] = useState('');
   const [identity, setIdentity] = useState<Address | null>(null);
@@ -103,6 +105,7 @@ export default function HeroPage() {
     run('accredited', async () => {
       if (!wallet || !identity) return;
       const c = await mockAccreditedClaim(identity);
+      const provider = await getProvider();
       const hash = await submitClaim({
         wallet,
         identity,
@@ -110,6 +113,7 @@ export default function HeroPage() {
         issuer: c.issuer,
         signature: c.signature,
         data: c.data,
+        provider,
       });
       addTx('accredited claim', hash);
       await refreshStatus();

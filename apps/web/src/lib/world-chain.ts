@@ -10,6 +10,7 @@ import {
   toHex,
   zeroAddress,
   type Address,
+  type EIP1193Provider,
   type Hex,
 } from 'viem';
 import { sepolia } from 'viem/chains';
@@ -83,14 +84,18 @@ export async function submitClaim(params: {
   issuer: Address;
   signature: Hex;
   data: Hex;
+  provider?: EIP1193Provider; // Privy embedded wallet; falls back to injected (MetaMask)
 }): Promise<Hex> {
-  if (typeof window === 'undefined' || !window.ethereum) {
-    throw new Error('No wallet found. Connect MetaMask to submit your claim.');
+  const injected =
+    params.provider ??
+    (typeof window !== 'undefined' ? (window.ethereum as unknown as EIP1193Provider) : undefined);
+  if (!injected) {
+    throw new Error('No wallet found. Connect a wallet to submit your claim.');
   }
   const walletClient = createWalletClient({
     account: params.wallet,
     chain: sepolia,
-    transport: custom(window.ethereum),
+    transport: custom(injected),
   });
 
   const hash = await walletClient.writeContract({
