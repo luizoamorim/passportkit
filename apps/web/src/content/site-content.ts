@@ -23,7 +23,9 @@ export const HERO = {
   secondHeadline: 'Take it back in one transaction.',
   description:
     'Passport Kit Node gives verified owners a secure identity and authorization layer for AI agents operating tokenized real-world assets. Define what the agent can do, enforce access rules onchain, and revoke its authority whenever necessary.',
-  primaryCta: { label: 'Launch App', href: '#access' },
+  // Was '#access', the landing sign-in block. That block was removed, so the CTA now
+  // points at /passport, which carries the wallet connection for the app itself.
+  primaryCta: { label: 'Launch App', href: '/passport' },
   secondaryCta: { label: 'Explore Architecture', href: '#architecture' },
 } as const;
 
