@@ -321,16 +321,26 @@ export default function HeroPage() {
           </div>
         ))}
 
-      {/* Step 3 — accredited -> GREEN */}
+      {/* Step 3 — age 18+ (World Identity Check) -> GREEN */}
       {(status === 'LIMITED' || status === 'GREEN') &&
-        step(3, 'Add accredited (labeled mock) → passport GREEN', status === 'GREEN', (
-          <button
-            onClick={doAccredited}
-            disabled={busy === 'accredited' || status === 'GREEN'}
-            className="text-sm font-semibold px-4 py-2.5 rounded-lg bg-[#0D1428] text-white disabled:opacity-40 w-full"
-          >
-            {status === 'GREEN' ? '✓ Accredited' : busy === 'accredited' ? 'Submitting…' : 'Add accredited claim (mock)'}
-          </button>
+        step(3, 'Verify age 18+ (World Identity Check) → passport GREEN', status === 'GREEN', (
+          <div className="space-y-2">
+            <p className="text-xs text-[#4B5568]">
+              Document-backed <span className="font-semibold">18+</span> attestation via World Identity
+              Check.{' '}
+              <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                LABELED MOCK
+              </span>{' '}
+              — real World Identity Check needs a passport-verified World App.
+            </p>
+            <button
+              onClick={doAccredited}
+              disabled={busy === 'accredited' || status === 'GREEN'}
+              className="text-sm font-semibold px-4 py-2.5 rounded-lg bg-[#0D1428] text-white disabled:opacity-40 w-full"
+            >
+              {status === 'GREEN' ? '✓ 18+ verified' : busy === 'accredited' ? 'Submitting…' : 'Verify 18+ (mock)'}
+            </button>
+          </div>
         ))}
 
       {/* Step 4 — create agent */}
