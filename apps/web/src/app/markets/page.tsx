@@ -18,6 +18,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { ActionButton } from '@/components/demo/ActionButton';
 import { ActorCard, type ActorCardRow } from '@/components/demo/ActorCard';
+import { EnsName, EnsStatus, WalletValue } from '@/components/demo/EnsLabel';
 import { ReasonBadge } from '@/components/demo/ReasonBadge';
 import { StatusPill, toneForStatus } from '@/components/demo/StatusPill';
 import { TxInspector } from '@/components/demo/TxInspector';
@@ -47,11 +48,12 @@ const CLAIM_LABELS: Record<ClaimName, string> = {
   accredited: 'ACCREDITED_INVESTOR',
 };
 
-/// Who the audience is looking at. An unknown actor simply gets no strapline.
+/// Who the audience is looking at — the card is headed by the ENS name, so this is
+/// where the person behind it is named. An unknown actor simply gets no strapline.
 const ROLES: Record<string, string> = {
-  operator: 'Admin, issuer signer & liquidity provider',
-  ana: 'Investor with KYC — accreditation still pending',
-  rui: 'Stranger — identity, zero claims',
+  operator: 'Operator — admin, issuer signer & liquidity provider',
+  ana: 'Ana — investor with KYC, accreditation still pending',
+  rui: 'Rui — stranger: identity, zero claims',
 };
 
 // ---------------------------------------------------------------- helpers
@@ -425,7 +427,10 @@ function MarketsActorCard({
   const backward = `${token1}→${token0}`;
 
   const rows: ActorCardRow[] = [
-    { label: 'wallet', value: mono(short(actor.wallet)) },
+    // surface #3 in one row: the resolver recomputes this from the SAME gate the pools
+    // below ask, so the name turns REVOKED at the same instant the pools start refusing
+    { label: 'ENS compliance.status', value: <EnsStatus ens={actor.ens} /> },
+    { label: 'wallet', value: <WalletValue address={actor.wallet} /> },
     { label: `${CLAIM_LABELS.kyc} claim`, value: <ClaimValue claim={actor.claims.kyc} /> },
     { label: `${CLAIM_LABELS.accredited} claim`, value: <ClaimValue claim={actor.claims.accredited} /> },
     { label: 'Deal Room pool', emphasis: true, value: <AccessValue access={actor.access.deal} /> },
@@ -442,7 +447,7 @@ function MarketsActorCard({
 
   return (
     <ActorCard
-      name={actor.name}
+      name={<EnsName ens={actor.ens} wallet={actor.wallet} />}
       role={ROLES[actor.name]}
       badge={
         <StatusPill tone={actor.identity ? 'good' : 'neutral'} mono title={actor.identity ?? undefined}>

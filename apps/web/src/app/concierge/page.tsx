@@ -24,6 +24,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActionButton } from '@/components/demo/ActionButton';
 import { ActorCard, type ActorCardRow } from '@/components/demo/ActorCard';
 import { ApprovalQueue } from '@/components/demo/ApprovalQueue';
+import { EnsName, EnsStatus, WalletValue } from '@/components/demo/EnsLabel';
 import { ReasonBadge } from '@/components/demo/ReasonBadge';
 import { StatusPill } from '@/components/demo/StatusPill';
 import { TicketFeed } from '@/components/demo/TicketFeed';
@@ -58,9 +59,10 @@ const PRESETS: { label: string; description: string; amount: string; category: s
   },
 ];
 
+/// The card is headed by the owner's ENS name, so this is where the person is named.
 const OWNER_ROLES: Record<string, string> = {
-  operator: 'Owner · issuer & simulated CRE',
-  ana: 'Owner · co-signer on large spend',
+  operator: 'Operator · owner, issuer & simulated CRE',
+  ana: 'Ana · owner, co-signer on large spend — and the principal behind the concierge',
 };
 
 // ---------------------------------------------------------------- helpers
@@ -582,9 +584,38 @@ function HouseHeader({ world }: { world: DemoWorldState }) {
   );
 }
 
+/**
+ * The agent, and the one idea the whole demo turns on: it is not a party.
+ * `bot.ana.casaazul.eth` is a SUBNAME of `ana.casaazul.eth` (Model A `linkAgent`), it
+ * holds no claims of its own, and PassportResolver resolves it to ANA's identity — so
+ * its `compliance.status` is hers, and revoking her below turns this name REVOKED in
+ * the same transaction. Everything below is read off `agent.ens`, never asserted here.
+ */
 function AgentCard({ agent }: { agent: DemoAgent }) {
+  const principal = agent.ens?.principal ?? null;
+
   const rows: ActorCardRow[] = [
-    { label: 'wallet', value: mono(short(agent.wallet)) },
+    { label: 'ENS compliance.status', emphasis: true, value: <EnsStatus ens={agent.ens} /> },
+    ...(principal
+      ? [
+          {
+            label: 'resolves to the identity of',
+            emphasis: true,
+            value: <span className="font-mono text-[11px] text-[#0D1428]">{principal.name}</span>,
+          },
+          {
+            label: 'ENSIP-25 agent link',
+            value:
+              agent.ens.registration === '1' ? (
+                <span className="text-[11px] font-bold text-green-700">✓ linked</span>
+              ) : (
+                <span className="text-[11px] text-[#9CA3AF]">{agent.ens.registration ? 'not linked' : '—'}</span>
+              ),
+          },
+          { label: 'agent reputation', value: mono(agent.ens.reputation ?? '—') },
+        ]
+      : []),
+    { label: 'wallet', value: <WalletValue address={agent.wallet} /> },
     {
       label: 'standing',
       emphasis: true,
@@ -601,15 +632,29 @@ function AgentCard({ agent }: { agent: DemoAgent }) {
 
   return (
     <ActorCard
-      name="Concierge"
-      role="Autonomous house agent — holds no passport of its own"
+      name={<EnsName ens={agent.ens} wallet={agent.wallet} />}
+      role={
+        principal
+          ? `Autonomous house agent — a subname of ${principal.name}, spending on that passport`
+          : 'Autonomous house agent — holds no passport of its own'
+      }
       badge={
         <StatusPill tone={agent.standing.ok ? 'good' : 'bad'}>
           {agent.standing.ok ? 'in good standing' : (agent.standing.reason ?? 'no standing')}
         </StatusPill>
       }
       rows={rows}
-    />
+    >
+      {principal && (
+        <p className="rounded-lg border border-[#DDE1EA] bg-[#F8F9FC] px-3 py-2 text-[11px] leading-relaxed text-[#4B5568]">
+          <b className="font-semibold text-[#0D1428]">This name is not its own.</b> It hangs off{' '}
+          <span className="font-mono text-[#0D1428]">{principal.name}</span> and resolves to that identity, so its
+          status is that person&apos;s status. Revoke them below and this name reads{' '}
+          <span className="font-mono text-[#0D1428]">REVOKED</span> in the same transaction — the agent has no
+          credentials to fall back on.
+        </p>
+      )}
+    </ActorCard>
   );
 }
 
@@ -623,7 +668,9 @@ function OwnerCard({
   onKyc: (owner: string, restore: boolean) => void;
 }) {
   const rows: ActorCardRow[] = [
-    { label: 'wallet', value: mono(short(owner.wallet)) },
+    // the same latch, seen through ENS — this is what the agent's name mirrors
+    { label: 'ENS compliance.status', value: <EnsStatus ens={owner.ens} /> },
+    { label: 'wallet', value: <WalletValue address={owner.wallet} /> },
     {
       label: 'EligibilityGate',
       emphasis: true,
@@ -637,7 +684,7 @@ function OwnerCard({
 
   return (
     <ActorCard
-      name={owner.name}
+      name={<EnsName ens={owner.ens} wallet={owner.wallet} />}
       role={OWNER_ROLES[owner.name] ?? 'Owner'}
       badge={<StatusPill tone={owner.compliant ? 'good' : 'bad'}>{owner.compliant ? 'compliant' : 'not compliant'}</StatusPill>}
       rows={rows}
