@@ -40,7 +40,12 @@ import {Reason} from "../src/libraries/Types.sol";
  *
  * Optional env:
  *   POOL_MANAGER      canonical v4 PoolManager; defaults per chain id (Eth/Base Sepolia)
- *   TOKEN_A, TOKEN_B  the pool pair. Unset -> deploys PROP + mUSD mocks and mints to the deployer
+ *   TOKEN_A, TOKEN_B  the pool pair. Unset -> deploys mCASA + mUSDC mocks and mints to the deployer
+ *   DEAL_HOOK, INVESTOR_HOOK
+ *                     reuse hooks already deployed on this chain instead of mining new ones
+ *                     (same hooks, new pair). Unset -> mine and deploy
+ *   BOOTSTRAP_LP      the one address allowed to seed an EMPTY pool without passing the policy;
+ *                     defaults to the deployer, set to the zero address for no exemption
  *   SEED_LIQUIDITY    "true" -> deploys the demo routers and adds full-range liquidity to both
  *                     pools. Requires the deployer to already pass BOTH policies, because
  *                     beforeAddLiquidity is gated by the very hook being deployed
@@ -110,8 +115,13 @@ contract DeployHooks is Script {
         vm.startBroadcast(deployerKey);
 
         _resolveTokens();
-        dealHook = _deployComplianceHook(POLICY_DEAL_ROOM);
-        investorHook = _deployComplianceHook(POLICY_INVESTOR);
+        // Reusing already-deployed hooks lets a second run point the SAME verified hooks at a
+        // new pair — the hook's identity is its (manager, gate, resolver, policy, bootstrap)
+        // tuple, not the tokens, so re-mining it for every pool would be waste.
+        dealHook = vm.envOr("DEAL_HOOK", address(0));
+        if (dealHook == address(0)) dealHook = _deployComplianceHook(POLICY_DEAL_ROOM);
+        investorHook = vm.envOr("INVESTOR_HOOK", address(0));
+        if (investorHook == address(0)) investorHook = _deployComplianceHook(POLICY_INVESTOR);
         poolManager.initialize(_poolKey(token0, token1, dealHook), SQRT_PRICE_1_1);
         poolManager.initialize(_poolKey(token0, token1, investorHook), SQRT_PRICE_1_1);
 
@@ -182,17 +192,17 @@ contract DeployHooks is Script {
 
     // --- deploys -------------------------------------------------------------------
 
-    /// The pair: bring your own two ERC-20s, or get PROP/mUSD mocks minted to the deployer.
+    /// The pair: bring your own two ERC-20s, or get mCASA/mUSDC mocks minted to the deployer.
     function _resolveTokens() internal {
         address a = vm.envOr("TOKEN_A", address(0));
         address b = vm.envOr("TOKEN_B", address(0));
 
         if (a == address(0) || b == address(0)) {
-            MockERC20 prop = new MockERC20("Property Share", "PROP", 18);
-            MockERC20 musd = new MockERC20("Mock USD", "mUSD", 18);
-            prop.mint(deployer, 1_000_000 ether);
-            musd.mint(deployer, 1_000_000 ether);
-            (a, b) = (address(prop), address(musd));
+            MockERC20 share = new MockERC20("Mock Casa Azul Share", "mCASA", 18);
+            MockERC20 stable = new MockERC20("Mock USD Coin", "mUSDC", 18);
+            share.mint(deployer, 1_000_000 ether);
+            stable.mint(deployer, 1_000_000 ether);
+            (a, b) = (address(share), address(stable));
         }
 
         require(a != b, "TOKEN_A and TOKEN_B must differ");

@@ -57,42 +57,50 @@ Next: in the ENSv2 app set `casaazul.eth`'s resolver → the DEMO PassportResolv
 
 ## Uniswap v4 hooks — LIVE on Ethereum Sepolia (2026-07-26)
 
-Deployed by `0x8368c1EAEad096124665E80D68eD0e763c242dC8`, **all four contracts verified on
-Etherscan**. 3.64M gas, ~0.0093 ETH at 2.55 gwei.
+A compliance-gated Uniswap v4 pool with **real liquidity that refuses the wallet which funded
+it**. Deployed by `0x8368c1EAEad096124665E80D68eD0e763c242dC8`; every contract verified on
+Etherscan.
 
-| Contract | Address | |
-|---|---|---|
-| **ComplianceHook** — policy #1 Deal Room | [`0xfA1df80d0f8Df129Df0CB6EdBF3aDA2f36544880`](https://sepolia.etherscan.io/address/0xfA1df80d0f8Df129Df0CB6EdBF3aDA2f36544880) | verified |
-| **ComplianceHook** — policy #2 Investor | [`0x7072E2b3e95caA88863857cD9E7941b8DF21c880`](https://sepolia.etherscan.io/address/0x7072E2b3e95caA88863857cD9E7941b8DF21c880) | verified |
-| mUSD (token0) | [`0x282B09c5f932D28caA086863d4bA78A4935db967`](https://sepolia.etherscan.io/address/0x282B09c5f932D28caA086863d4bA78A4935db967) | verified |
-| PROP (token1) | [`0x67FB48B3Bdc0fc9d744dF3d9a7933d15b879b2bE`](https://sepolia.etherscan.io/address/0x67FB48B3Bdc0fc9d744dF3d9a7933d15b879b2bE) | verified |
+| Contract | Address |
+|---|---|
+| **ComplianceHook** — policy #1 Deal Room | [`0x9296d27031bb2A1Bc4912095FF7bB017642CC880`](https://sepolia.etherscan.io/address/0x9296d27031bb2A1Bc4912095FF7bB017642CC880) |
+| **ComplianceHook** — policy #2 Investor | [`0x38161b21c5A208416784d97147f14D53A298c880`](https://sepolia.etherscan.io/address/0x38161b21c5A208416784d97147f14D53A298c880) |
+| mUSDC — Mock USD Coin (token0) | [`0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA`](https://sepolia.etherscan.io/address/0x268c3BF1AF90f5Bd88B4fbf24fd358617493F3cA) |
+| mCASA — Mock Casa Azul Share (token1) | [`0x77Cb80742E424E688A8AE5214000b9af7Ad7C384`](https://sepolia.etherscan.io/address/0x77Cb80742E424E688A8AE5214000b9af7Ad7C384) |
+| PoolSwapTest (swap router) | [`0x4d7a2B21f66ee4f39A92456AFeBEF096a8125e14`](https://sepolia.etherscan.io/address/0x4d7a2B21f66ee4f39A92456AFeBEF096a8125e14) |
+| DemoPositionRouter (liquidity) | [`0x62273D6355f9c5341267281f53aC00F55cca3D29`](https://sepolia.etherscan.io/address/0x62273D6355f9c5341267281f53aC00F55cca3D29) |
 
 Both hook addresses end in **`0880`** — the low 14 bits are
-`BEFORE_ADD_LIQUIDITY_FLAG | BEFORE_SWAP_FLAG`, which is what makes them valid v4 hooks. Both read
-the live `EligibilityGate` `0x51574D58…` and `IdentityFactory` `0x23504699…`; neither carries any
-eligibility logic of its own.
+`BEFORE_ADD_LIQUIDITY_FLAG | BEFORE_SWAP_FLAG`, which is what makes them valid v4 hooks and why
+they must be CREATE2-mined. Both read the live `EligibilityGate` `0x51574D58…` and
+`IdentityFactory` `0x23504699…`; neither carries any eligibility logic of its own.
 
-Pools on the canonical PoolManager `0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`, mUSD/PROP,
-fee 3000, tickSpacing 60, initialized at 1:1:
+Pools on the canonical PoolManager `0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`, mUSDC/mCASA,
+fee 3000, tickSpacing 60, initialized at 1:1 and seeded full-range:
 
 | Pool | poolId | liquidity |
 |---|---|---|
-| Deal Room | `0x86236cd33660e6af718bc9e17390c2df2c96f2964307b9dc8dcdd712df71d2de` | 0 |
-| Investor | `0xfe72b0f15e2cb85fc0d1dc5b235eeac3ef7ccb76e9701edf4584c4c9f1b413a9` | 0 |
+| Deal Room (KYC) | `0x15733821d335c421770f8cbab57d443dcf29fe1969ed394928af08718d6da075` | 10,000e18 |
+| Investor (KYC + accredited) | `0x33565851df36e4c733c2d602f1dec2ac54994d978a9169ed822d5f50198a651e` | 10,000e18 |
 
-Deploy transactions:
+### The demo, as three on-chain facts
 
-| What | Tx |
-|---|---|
-| ComplianceHook (deal), CREATE2 | [`0x38afb8d8…`](https://sepolia.etherscan.io/tx/0x38afb8d87f349ed3008fd44a38fa2d0e091c74bcd5aa0345b2170635684b0bf0) |
-| ComplianceHook (investor), CREATE2 | [`0xa5c212cd…`](https://sepolia.etherscan.io/tx/0xa5c212cd0bfb7dc63e3046b8812050084d5fb8eb4c46a446873827eb7fd08f73) |
-| PoolManager.initialize (deal) | [`0xb274eb3e…`](https://sepolia.etherscan.io/tx/0xb274eb3ec65f3a77287598d874610c75ee2f4c2967fec4dd16ba62c3691ed73f) |
-| PoolManager.initialize (investor) | [`0xffe38f06…`](https://sepolia.etherscan.io/tx/0xffe38f06e86d084feb69ef929695f59d25f83d9a069056e19b8d626f7de01f79) |
+**1 — the pool refuses a swap, with the gate's own reason code.**
+[`0xc1b5f813…`](https://sepolia.etherscan.io/tx/0xc1b5f8130ed1627732c2a5a55a6cb23f34ea5c236214d0516a3f66bd7f51992d)
+is a **failed** transaction. Decoded, the revert is v4's `WrappedError` naming the hook and
+`beforeSwap`, wrapping:
 
-### The gate answering live, on a public chain
+```
+NotCompliant(0x8368c1EAEad096124665E80D68eD0e763c242dC8, "NO_IDENTITY")
+```
+
+The swapper is the wallet that deployed the pool and provided all of its liquidity. Seeding a
+pool never buys the right to trade in it.
+
+**2 — the refusal follows the issuer, not the pool.**
 
 ```bash
-H=0xfA1df80d0f8Df129Df0CB6EdBF3aDA2f36544880
+H=0x9296d27031bb2A1Bc4912095FF7bB017642CC880
 RPC=https://ethereum-sepolia-rpc.publicnode.com
 cast call $H "reasonFor(address)(bytes32)" 0x8368c1EAEad096124665E80D68eD0e763c242dC8 --rpc-url $RPC
 #   -> NO_IDENTITY   (a wallet the IdentityFactory has never seen)
@@ -100,20 +108,64 @@ cast call $H "reasonFor(address)(bytes32)" 0xEc98B58F86a32aAd7B32E17f292e6B64048
 #   -> MISSING_KYC   (has an identity; the issuer's revocation latch is ON)
 ```
 
-That second answer is the whole thesis in one call: the same latch that makes
-`luiz.casaazul.eth` resolve `REVOKED` also makes the Uniswap pool refuse. One revocation, every
-surface.
+That second answer is the thesis in one call: the same latch that makes `luiz.casaazul.eth`
+resolve `REVOKED` makes the Uniswap pool refuse. One revocation, every surface.
+
+**3 — exit is never gated.** `beforeRemoveLiquidity` is off by design, so anyone who loses
+compliance can still withdraw. Compliance blocks movement to a counterparty, never your own exit.
+
+### Bootstrapping a gated pool
+
+A gated pool has a chicken-and-egg problem: `beforeAddLiquidity` consults the gate, so the first
+LP must already be compliant — but on a fresh deployment nobody is, and an empty pool proves
+nothing. `ComplianceHook.bootstrapLp` is the narrowest possible fix, and it is
+`0x8368c1EAEad096124665E80D68eD0e763c242dC8` on both hooks above:
+
+- **one address**, fixed at construction, immutable — no admin, no setter, visible in the
+  verified source;
+- **add-liquidity only** — swaps are never exempt, which is exactly what tx 1 above demonstrates;
+- **one-shot** — `isBootstrapping()` returns false the moment the pool holds liquidity, even for
+  the bootstrap LP itself, so unverified capital cannot be stacked alongside verified capital;
+- `address(0)` disables it entirely, checked explicitly so hookData declaring `address(0)` as the
+  actor is never mistaken for a match.
+
+`DeployAll.s.sol` (the local anvil world) passes `address(0)` — its operator is fully verified and
+seeds through the gate like anyone else.
+
+### Deploy transactions
+
+| What | Tx |
+|---|---|
+| ComplianceHook (deal), CREATE2 | [`0x3f9a705b…`](https://sepolia.etherscan.io/tx/0x3f9a705b0d36b46c4e82c8d9b057f8970a9af90964aaeaa20e43af1df7942289) |
+| ComplianceHook (investor), CREATE2 | [`0x6179df12…`](https://sepolia.etherscan.io/tx/0x6179df12a3b0ef6c844caf6c3e63e934e19b627879ea79d9e4c340d0d48072d9) |
+| PoolManager.initialize (deal) | [`0x98a297d0…`](https://sepolia.etherscan.io/tx/0x98a297d0f40bd6b622d2634e40f91e3a3f00a8b3880d0d1069ea3e7477549639) |
+| PoolManager.initialize (investor) | [`0xed771f35…`](https://sepolia.etherscan.io/tx/0xed771f358c96e8ca9d19532ff96cc2f65f5a5f1fd5c14d86a6671594f9c8e53e) |
+| addLiquidity (deal), bootstrap LP | [`0xdca89d13…`](https://sepolia.etherscan.io/tx/0xdca89d13238613890d02132c5a959ed18d9c45add03d5e73f0d26fb55e898a3d) |
+| addLiquidity (investor), bootstrap LP | [`0x2bb217ab…`](https://sepolia.etherscan.io/tx/0x2bb217ab3b04f54c8a75aedf4782069be2e935c8687471fe3240f07ab7081a90) |
+| **swap → NotCompliant (failed, on purpose)** | [`0xc1b5f813…`](https://sepolia.etherscan.io/tx/0xc1b5f8130ed1627732c2a5a55a6cb23f34ea5c236214d0516a3f66bd7f51992d) |
+
+~10.2M gas across both runs, about 0.026 ETH.
+
+### Superseded (ignore these)
+
+A first pass deployed hooks without `bootstrapLp` and a PROP/mUSD pair. Those pools can never be
+seeded, so they are dead: hooks `0xfA1df80d…4880` / `0x7072E2b3…c880`, tokens
+`0x282B09c5…` (mUSD) / `0x67FB48B3…` (PROP). A second pass on the current hooks used the same old
+pair before mCASA/mUSDC existed; its liquidity is recoverable at any time via
+`DemoPositionRouter` `0x08b3cb0e…`, since removing liquidity is ungated.
 
 ### Still to do on Sepolia
 
-Liquidity is 0 in both pools, so the **green path can't be shown on Sepolia yet** — the refusal
-path works today. `beforeAddLiquidity` consults the same gate, and no wallet currently passes:
-`0x8368…` has no identity, and the only identity that exists (`0xD2AD5CeB…`) is KYC-latched. Needs
-one action from the `0xEc98…` key holder — either clear the latch and LP as `0xEc98…`, or
-`createIdentity(0x8368…)` plus a signed KYC + accredited claim. Then re-run with
-`SEED_LIQUIDITY=true`.
+**The green path.** A *successful* swap needs a wallet that passes the policy, and none exists
+yet: `0x8368…` has no identity, and the only identity (`0xD2AD5CeB…`) is KYC-latched. The
+bootstrap exemption deliberately does not help here. One action from the `0xEc98…` key holder
+unblocks it — either clear the latch and trade as `0xEc98…`, or `createIdentity(0x8368…)` plus a
+signed KYC claim (Model B: issuer signs, holder submits).
 
-`MandateHook` is not deployed here: it needs a `HouseTreasury`, which is anvil-only so far.
+**MandateHook** is not deployed here: it needs a `HouseTreasury`, which is anvil-only so far.
+
+---
+
 
 ---
 
@@ -157,15 +209,17 @@ export IDENTITY_FACTORY_ADDRESS=0x23504699EAcc1842d01998C0D57C53a2CF1638A0
 forge script script/DeployHooks.s.sol --rpc-url $RPC_URL --broadcast -vvv
 ```
 
-Roughly **10.5M gas** for the full run (two hooks + two pools + tokens + routers + liquidity).
+Roughly **5M gas** for the full run (two hooks + two pools + tokens + routers + liquidity).
 
 Optional env:
 
 | Var | Effect |
 |---|---|
 | `POOL_MANAGER` | Override the per-chain default |
-| `TOKEN_A` / `TOKEN_B` | Use your own pair. Unset → deploys PROP + mUSD mocks and mints 1M of each to the deployer |
+| `TOKEN_A` / `TOKEN_B` | Use your own pair. Unset → deploys mCASA + mUSDC mocks and mints 1M of each to the deployer |
+| `DEAL_HOOK` / `INVESTOR_HOOK` | Reuse hooks already deployed on this chain instead of mining new ones — point the same verified hooks at a new pair |
 | `SEED_LIQUIDITY=true` | Also deploy the demo routers and add full-range liquidity to both pools |
+| `BOOTSTRAP_LP` | The one address allowed to seed an EMPTY pool without passing the policy. Defaults to the deployer; set to the zero address for no exemption at all |
 | `HOUSE_TREASURY` | Also mine `MandateHook` and open the CASA/spend-token pool |
 
 Add `--verify --etherscan-api-key $ETHERSCAN_API_KEY` to verify the hooks on Etherscan.
@@ -175,10 +229,14 @@ the pool parameters and the routers.
 
 ### The gotcha that costs an afternoon
 
-`beforeAddLiquidity` is gated by the very hook you just deployed, so **the deployer cannot seed
-its own pool unless it already passes the policy** — policy #1 for the deal pool, policy #2 for
-the investor pool. The script pre-checks this before broadcasting and refuses with the gate's own
-reason code rather than burning gas on a revert:
+`beforeAddLiquidity` is gated by the very hook you just deployed, so **nobody can seed the pool
+unless they already pass the policy** — policy #1 for the deal pool, policy #2 for the investor
+pool. That is what `BOOTSTRAP_LP` exists for, and why it defaults to the deployer: the first add
+into an empty pool is exempt, everything after it is not (see "Bootstrapping a gated pool" above).
+
+If you set `BOOTSTRAP_LP` to someone other than the deployer and still ask for `SEED_LIQUIDITY`,
+the script pre-checks eligibility before broadcasting and refuses with the gate's own reason code
+rather than burning gas on a revert:
 
 ```
 deployer                 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
@@ -186,9 +244,8 @@ deal-room policy reason  MISSING_KYC
 Error: SEED_LIQUIDITY needs a deployer passing BOTH policies …
 ```
 
-Fix it by giving the deployer an identity and both claims first (`WireEnsDemo.s.sol` does exactly
-this for its owner key), then re-run. Without `SEED_LIQUIDITY` the hooks and pools deploy fine and
-you can add liquidity later from any compliant wallet.
+Fix it by giving that wallet an identity and both claims first (`WireEnsDemo.s.sol` does exactly
+this for its owner key), then re-run.
 
 ### Not gated: exit
 

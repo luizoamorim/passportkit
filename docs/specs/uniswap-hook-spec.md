@@ -19,8 +19,12 @@
 ---
 
 ## 1. Design
-- ✅ `beforeSwap` — only a compliant wallet can trade (**demo hero**).
-- ✅ `beforeAddLiquidity` — only a compliant wallet can provide liquidity.
+- ✅ `beforeSwap` — only a compliant wallet can trade (**demo hero**). No exemptions, ever.
+- ✅ `beforeAddLiquidity` — only a compliant wallet can provide liquidity, with one bounded
+  exception: the immutable `bootstrapLp` may seed a pool **while it is still empty**, because a
+  gated pool otherwise cannot be opened at all (its first LP would have to be compliant before
+  any issuer exists on that chain). One address, add-liquidity only, closes the moment the pool
+  holds liquidity, `address(0)` to disable. See `docs/DEPLOYMENTS.md`.
 - ❌ `beforeRemoveLiquidity` — **exit always free**: never trap funds of someone who lost compliance (e.g. expired claim). Good design + talking point.
 - `afterSwap`/`afterAddLiquidity` — not used for the gate (accounting only). Optional: `afterSwap` to emit `CompliantSwap` (indexable).
 
@@ -123,7 +127,7 @@ contract ComplianceHook is BaseHook {
 
 **Upgrade (only if the rest is done):**
 - [x] Live deploy on **Ethereum Sepolia** via `HookMiner` + `CREATE2_DEPLOYER` (`0x4e59…4956C`) — scripted in `contracts/script/DeployHooks.s.sol`, runbook + canonical `PoolManager` addresses in `docs/DEPLOYMENTS.md`. It deploys against an existing PassportKit stack (unlike `DeployAll.s.sol`, which builds a whole anvil world) and pre-checks the deployer's eligibility, because `beforeAddLiquidity` gates the deployer out of seeding its own pool.
-- [ ] `forge script` with a live swap → tx hash for the submission.
+- [x] `forge script` with a live swap → tx hash for the submission: [`0xc1b5f813…`](https://sepolia.etherscan.io/tx/0xc1b5f8130ed1627732c2a5a55a6cb23f34ea5c236214d0516a3f66bd7f51992d) is a real failed swap on the live Sepolia pool, reverting `NotCompliant(0x8368…, "NO_IDENTITY")` — sent by the wallet that funded 100% of that pool's liquidity. Addresses in `docs/DEPLOYMENTS.md`.
 
 **Avoid (rabbit hole):** a web swap UI (UniversalRouter + Permit2 + approvals). The revert is shown in the test/script.
 
