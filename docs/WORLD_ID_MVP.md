@@ -65,6 +65,24 @@ endpoint (`POST https://developer.world.org/api/v1/precheck/{app_id}` with
 `{"action": "..."}`) tells you whether a capability is enabled before you burn
 demo time on an unexplained spinner.
 
+## Provisioned resources (team `passportkit`, 2026-07-26)
+
+Created through the Developer Portal MCP; only the signing key is secret and it
+lives solely in `apps/api/.env` (returned once at mint time — losing it means a
+confirmed rotation).
+
+- App: `app_9e3d2003799702f4260df63889b777ce` (external / IDKit mode)
+- RP: `rp_a0978245ff2b46b0` — on-chain registration **registered** in production
+  and staging; signer address `0x886492f62CFC97DefD22b82d09E5e2BA902542fA`
+- Actions: `passportkit-verify`, `passportkit-selfie`, `passportkit-identity`,
+  each in **both** production and staging, so switching is `WORLD_ENV` only
+- `enable_face_check: true` — Selfie Check capability is on for this app
+- Heads-up: the portal defaults actions to `max_verifications: 1` per World ID —
+  repeated end-to-end tests from one phone will eventually hit
+  `max_verifications_reached`; raise the limit in the dashboard when it bites.
+- The Developer Portal MCP server is registered project-scoped in
+  `FINAL/world/.mcp.json` (gitignored — it embeds the team API key).
+
 ## Run
 
 ```bash
