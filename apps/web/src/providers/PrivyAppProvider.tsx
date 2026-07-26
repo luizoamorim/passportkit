@@ -1,6 +1,7 @@
 'use client';
 
 import { PrivyProvider } from '@privy-io/react-auth';
+import { sepolia } from 'viem/chains';
 
 export function PrivyAppProvider({ children }: { children: React.ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
@@ -14,6 +15,9 @@ export function PrivyAppProvider({ children }: { children: React.ReactNode }) {
     <PrivyProvider
       appId={appId}
       config={{
+        // The whole demo is on Sepolia — the embedded wallet must sign there.
+        defaultChain: sepolia,
+        supportedChains: [sepolia],
         embeddedWallets: {
           ethereum: { createOnLogin: 'users-without-wallets' },
         },
