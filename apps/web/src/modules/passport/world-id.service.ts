@@ -53,15 +53,13 @@ export async function verifyWorldId(wallet: string, identity: string, idkitRespo
 
 export async function verifySelfieCheck(wallet: string, identity: string, idkitResponse: Record<string, unknown>) {
   try {
-    const result = await apiFetch<PreparedClaim | { mode: 'mock'; verified: true; message: string }>('/world-id/selfie/verify', {
+    return await apiFetch<PreparedClaim | { mode: 'mock'; verified: true; message: string }>('/world-id/selfie/verify', {
       method: 'POST', body: JSON.stringify({ wallet, identity, idkitResponse }),
     });
-    console.info('[Selfie Check] backend response status/body', { status: 200, mode: result.mode, verified: result.verified });
-    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown backend error';
     const status = /^API (\d+):/.exec(message)?.[1] ?? 'network';
-    console.error('[Selfie Check] backend response status/body', { status, message: message.replace(/0x[a-fA-F0-9]+/g, '[redacted]') });
+    console.error('[Selfie Check] verification rejected', { status, message: message.replace(/0x[a-fA-F0-9]+/g, '[redacted]') });
     throw error;
   }
 }

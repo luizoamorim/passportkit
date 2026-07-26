@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { IDKitInviteCodeRequestWidget, selfieCheckLegacy, setDebug, type IDKitDebugReport, type IDKitResult, type RpContext } from '@worldcoin/idkit';
 import { motion, useReducedMotion } from 'motion/react';
 import { createWalletClient, custom, parseAbi, type Address } from 'viem';
@@ -32,7 +32,6 @@ export function SelfieCheckCard({ wallet, identity, status: initialStatus, mode,
   const [request, setRequest] = useState<WorldRequest | null>(null);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const verifyCallCountRef = useRef(0);
 
   const start = async () => {
     if (!identity) {
@@ -43,10 +42,9 @@ export function SelfieCheckCard({ wallet, identity, status: initialStatus, mode,
     setStatus('preparing');
     setMessage(null);
     try {
-      // TEMP diagnostic: enable IDKit debug mode so onError receives a populated debug report.
+      // Debug mode outside production so onError receives a populated debug report.
       if (process.env.NODE_ENV !== 'production') setDebug(true);
       const next = await requestSelfieCheck();
-      console.info('[Selfie Check] selfie request created', { action: next.action, environment: next.environment });
       setRequest(next);
       setStatus('waiting_for_mobile');
       setOpen(true);
@@ -71,46 +69,40 @@ export function SelfieCheckCard({ wallet, identity, status: initialStatus, mode,
   const handleVerify = async (result: IDKitResult) => {
     setStatus('verifying');
     const payload = result as unknown as Record<string, unknown>;
-    const responses = Array.isArray(payload.responses) ? payload.responses : [];
-    const identifiers = responses.flatMap((response) => (
-      typeof response === 'object' && response !== null && typeof (response as Record<string, unknown>).identifier === 'string'
-        ? [(response as Record<string, unknown>).identifier]
-        : []
-    ));
-    verifyCallCountRef.current += 1;
-    console.info('[Selfie Check] World App completed; proof received in handleVerify', {
-      invocation: verifyCallCountRef.current,
-      resultType: typeof result,
-      resultKeys: Object.keys(payload),
-      protocolVersion: payload.protocol_version,
-      proofType: identifiers,
-      responseCount: responses.length,
-      actionPresent: typeof payload.action === 'string',
-      environment: payload.environment,
-    });
+    let verified: Awaited<ReturnType<typeof verifySelfieCheck>>;
     try {
-      const verified = await verifySelfieCheck(wallet, identity!, payload);
-      if (verified.mode === 'onchain') {
-        console.info('[Selfie Check] backend verified; mode=onchain — submitting claim from wallet', {
-          injectedProviderPresent: typeof window.ethereum !== 'undefined',
-        });
-        const hash = await submitClaim(verified.claim);
-        setStatus('verified');
-        setMessage('Selfie Check verified. Your wallet submitted a PROOF_OF_PERSONHOOD claim.');
-        console.info('[Selfie Check] UI state updated', { status: 'verified', mode: 'onchain' });
-        await onComplete('Selfie Check claim submitted from your wallet.', hash);
-      } else {
-        setStatus('verified');
-        setMessage('Selfie Check verified.');
-        console.info('[Selfie Check] UI state updated', { status: 'verified', mode: 'mock' });
-        await onComplete(verified.message);
-      }
+      verified = await verifySelfieCheck(wallet, identity!, payload);
     } catch (error) {
+      // Only a rejected PROOF may reject handleVerify: IDKit turns that into its
+      // "Verification declined / Failed to verify your credential proof" screen.
       const detail = error instanceof Error ? error.message : 'Selfie Check verification failed.';
       setStatus('error');
       setMessage(detail);
-      console.error('[Selfie Check] UI state updated', { status: 'error', detail: detail.replace(/0x[a-fA-F0-9]+/g, '[redacted]') });
+      console.error('[Selfie Check] proof rejected', { detail: detail.replace(/0x[a-fA-F0-9]+/g, '[redacted]') });
       throw error;
+    }
+
+    // The proof is verified from here on. Submitting the claim is a separate wallet step:
+    // if it fails, the credential was still proven, so never report it as a proof failure.
+    if (verified.mode !== 'onchain') {
+      setStatus('verified');
+      setMessage('Selfie Check verified.');
+      await onComplete(verified.message);
+      return;
+    }
+    try {
+      const hash = await submitClaim(verified.claim);
+      setStatus('verified');
+      setMessage('Selfie Check verified. Your wallet submitted a PROOF_OF_PERSONHOOD claim.');
+      await onComplete('Selfie Check claim submitted from your wallet.', hash);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'The claim could not be submitted.';
+      setStatus('error');
+      setMessage(`Selfie Check verified, but the on-chain claim was not submitted: ${detail}`);
+      console.error('[Selfie Check] claim submission failed after a verified proof', {
+        detail: detail.replace(/0x[a-fA-F0-9]+/g, '[redacted]'),
+        injectedProviderPresent: typeof window.ethereum !== 'undefined',
+      });
     }
   };
 
@@ -129,7 +121,7 @@ export function SelfieCheckCard({ wallet, identity, status: initialStatus, mode,
       {mode === 'mock' && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800"><span className="font-bold">Demo mode.</span> A successful sandbox proof updates local status only; it does not write onchain.</p>}
       {message && <p role={status === 'error' ? 'alert' : 'status'} className={`mt-5 rounded-xl px-3 py-2.5 text-xs leading-5 ${status === 'error' ? 'border border-red-200 bg-red-50 text-red-700' : 'bg-slate-50 text-slate-600'}`}>{message}</p>}
       <motion.button whileHover={isBusy || status === 'verified' || reduceMotion ? undefined : { scale: 1.01 }} whileTap={isBusy || status === 'verified' || reduceMotion ? undefined : { scale: 0.99 }} onClick={start} disabled={isBusy || status === 'verified'} className="mt-6 w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none">{label}</motion.button>
-      {request && <IDKitInviteCodeRequestWidget open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen && status === 'waiting_for_mobile') { setStatus('cancelled'); setMessage('Selfie Check was cancelled before a proof was received.'); } }} app_id={request.app_id} action={request.action} rp_context={request.rp_context as RpContext} environment={request.environment} preset={selfieCheckLegacy({ signal: wallet.toLowerCase() })} allow_legacy_proofs={true} autoClose={false} handleVerify={handleVerify} onSuccess={() => { console.info('[Selfie Check] onSuccess called'); setOpen(false); }} onError={(code, debugReport?: IDKitDebugReport) => { console.error('[Selfie Check] widget error', { errorCode: code, requestId: debugReport?.request_id, debugReport: debugReport ? { version: debugReport.version, packageVersion: debugReport.package_version, transport: debugReport.transport, generatedAt: debugReport.generated_at, requestId: debugReport.request_id, miniApp: debugReport.mini_app } : undefined }); setMessage((current) => current ?? (code === 'user_rejected' ? 'Selfie Check was cancelled.' : 'Selfie Check could not complete verification.')); setStatus(code === 'user_rejected' ? 'cancelled' : 'error'); }} />}
+      {request && <IDKitInviteCodeRequestWidget open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen && status === 'waiting_for_mobile') { setStatus('cancelled'); setMessage('Selfie Check was cancelled before a proof was received.'); } }} app_id={request.app_id} action={request.action} rp_context={request.rp_context as RpContext} environment={request.environment} preset={selfieCheckLegacy({ signal: wallet.toLowerCase() })} allow_legacy_proofs={true} autoClose={false} handleVerify={handleVerify} onSuccess={() => { console.info('[Selfie Check] onSuccess called'); setOpen(false); }} onError={(code, debugReport?: IDKitDebugReport) => { console.error('[Selfie Check] widget error', { errorCode: code, requestId: debugReport?.request_id, debugReport: debugReport ? { version: debugReport.version, packageVersion: debugReport.package_version, transport: debugReport.transport, generatedAt: debugReport.generated_at, requestId: debugReport.request_id, miniApp: debugReport.mini_app } : undefined }); setMessage((current) => current ?? (code === 'user_rejected' ? 'Selfie Check was cancelled.' : `Selfie Check could not complete verification (${code}).`)); setStatus(code === 'user_rejected' ? 'cancelled' : 'error'); }} />}
     </motion.div>
   );
 }

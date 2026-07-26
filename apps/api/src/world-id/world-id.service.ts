@@ -2,6 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable, Logger } from '@n
 import { signRequest } from '@worldcoin/idkit-server';
 import { keccak256, toHex, type Address, type Hex } from 'viem';
 import { randomBytes } from 'crypto';
+import { appendFileSync } from 'fs';
 import { DemoStateService } from '../demo/demo-state.service';
 import { CLAIM_TOPICS } from '../issuer/claim-topics';
 import { IssuerSigningService } from '../issuer/issuer-signing.service';
@@ -15,6 +16,9 @@ type RpContext = {
 };
 
 type WorldEnvironment = 'staging' | 'sandbox';
+
+/** TEMP diagnostics sink; remove with captureVerifierOutcome. */
+const VERIFIER_CAPTURE_PATH = 'C:\\Users\\Domingos\\AppData\\Local\\Temp\\claude\\c--Users-Domingos-Documents-Hackathon\\b8f06615-c810-41a6-93e2-69756ca434e1\\scratchpad\\world-verify.log';
 
 type SanitizedVerifierResponse = {
   success?: boolean;
@@ -101,12 +105,11 @@ export class WorldIdService {
   ) {
     const action = this.getSelfieAction();
     const diagnostics = this.getSelfieProofDiagnostics(idkitResponse);
-    this.logger.log(`[Selfie Check] backend endpoint called=/world-id/selfie/verify; action=${diagnostics.action ?? 'missing'}; expectedAction=${action}; environment=${diagnostics.environment}; proof type/version=${diagnostics.protocolVersion}/${diagnostics.identifiers.join(',') || 'missing'}; signalPresent=${diagnostics.signalPresent}; rpIdPresent=${diagnostics.rpIdPresent}; responses=${diagnostics.responseCount}`);
-    // TEMP diagnostic (sanitized): top-level keys + nonce presence only, never proof/signal values.
-    this.logger.log(`[Selfie Check] payload keys=${Object.keys(idkitResponse).join(',')}; noncePresent=${typeof idkitResponse.nonce === 'string'}`);
     // selfieCheckLegacy returns a World ID 3.0 Face proof. Its response identifier is
     // verifier-owned and must not be guessed locally; World verifies the credential below.
     if (diagnostics.protocolVersion !== '3.0' || diagnostics.responseCount === 0) {
+      this.logger.warn(`[Selfie Check] rejected before calling the World verifier; protocolVersion=${diagnostics.protocolVersion}; responses=${diagnostics.responseCount}`);
+      this.captureVerifierOutcome('selfie-check-beta', idkitResponse, 0, { success: false, code: 'local_guard_rejected' });
       throw new BadRequestException({
         message: 'Selfie Check expected a World ID 3.0 Face proof.',
         proofType: diagnostics.identifiers,
@@ -135,6 +138,35 @@ export class WorldIdService {
     );
   }
 
+  /**
+   * TEMP debug path (remove with /world-id-debug). Mirrors the known-good world-id-practice
+   * server: forward the IDKit result unchanged and return World's verdict verbatim.
+   * No local guard, no claim signing, no wallet, no demo-mode fallback.
+   */
+  async debugVerify(idkitResponse: Record<string, unknown>) {
+    const rpId = process.env.WORLD_RP_ID;
+    if (!rpId) throw new BadRequestException('WORLD_RP_ID is not configured');
+
+    const response = await fetch(`https://developer.world.org/api/v4/verify/${rpId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(idkitResponse),
+    });
+    const body = (await response.json().catch(() => null)) as SanitizedVerifierResponse | null;
+    const sanitized = body ? this.sanitizeVerifierResponse(body) : null;
+    this.captureVerifierOutcome('debug', idkitResponse, response.status, sanitized ?? {});
+    this.logger.log(`[world-id-debug] verifier status=${response.status} body=${JSON.stringify(sanitized)}`);
+
+    if (!response.ok || body?.success !== true) {
+      throw new BadRequestException({
+        message: 'World ID rejected this proof',
+        verifierStatus: response.status,
+        verifier: sanitized,
+      });
+    }
+    return { verified: true, verifierStatus: response.status, verifier: sanitized };
+  }
+
   private async verifyAndPreparePersonhoodClaim(
     wallet: Address,
     identity: Address,
@@ -156,10 +188,11 @@ export class WorldIdService {
       });
       verification = (await response.json()) as { success?: boolean; nullifier?: string; message?: string };
       const sanitized = this.sanitizeVerifierResponse(verification as SanitizedVerifierResponse);
-      if (credential === 'selfie-check-beta') {
-        this.logger.log(`[Selfie Check] World verifier response status=${response.status} body=${JSON.stringify(sanitized)}`);
-      }
+      this.captureVerifierOutcome(credential, idkitResponse, response.status, sanitized);
       if (!response.ok || !verification.success) {
+        if (credential === 'selfie-check-beta') {
+          this.logger.warn(`[Selfie Check] World verifier rejected the proof; status=${response.status} body=${JSON.stringify(sanitized)}`);
+        }
         const failedResult = sanitized.results?.find((result) => !result.success);
         const reason = [
           failedResult?.code ?? sanitized.code,
@@ -193,10 +226,6 @@ export class WorldIdService {
         expiresAt,
         nonce,
       });
-      if (credential === 'selfie-check-beta') {
-        // TEMP diagnostic: proves the World verification SUCCEEDED and the response mode is onchain.
-        this.logger.log('[Selfie Check] World verification OK; returning mode=onchain (frontend will submit the claim from the wallet)');
-      }
       return { mode: 'onchain' as const, verified: true, claim };
     } catch (error) {
       if (!this.demo.enabled) throw error;
@@ -208,6 +237,44 @@ export class WorldIdService {
         verified: true,
         message: `${credential === 'selfie-check-beta' ? 'Selfie Check' : topic === CLAIM_TOPICS.KYC_VERIFIED ? 'Identity Check' : 'World ID'} verified. DEMO_MODE records a local status only; no claim was written on-chain.`,
       };
+    }
+  }
+
+  /**
+   * TEMP capture (remove once Selfie/Identity Check are green): writes the sanitized verifier
+   * outcome to a file so the exact code/detail can be read without copying terminal output.
+   * Never records proof, signal, nullifier or key material.
+   */
+  private captureVerifierOutcome(
+    credential: string,
+    payload: Record<string, unknown>,
+    status: number,
+    sanitized: Partial<ReturnType<WorldIdService['sanitizeVerifierResponse']>>,
+  ) {
+    try {
+      const responses = Array.isArray(payload.responses) ? payload.responses : [];
+      const identifiers = responses.flatMap((entry) => (
+        typeof entry === 'object' && entry !== null && typeof (entry as Record<string, unknown>).identifier === 'string'
+          ? [(entry as Record<string, unknown>).identifier as string]
+          : []
+      ));
+      appendFileSync(
+        VERIFIER_CAPTURE_PATH,
+        `${JSON.stringify({
+          credential,
+          status,
+          protocol_version: payload.protocol_version,
+          identifiers,
+          responseCount: responses.length,
+          actionPresent: typeof payload.action === 'string',
+          environment: payload.environment,
+          userPresenceCompleted: payload.user_presence_completed,
+          payloadKeys: Object.keys(payload),
+          verifier: sanitized,
+        })}\n`,
+      );
+    } catch {
+      // Diagnostics must never break verification.
     }
   }
 

@@ -54,14 +54,31 @@ export function WorldIdPersonhoodCard({ wallet, identity, status: initialStatus,
 
   const handleVerify = async (result: IDKitResult) => {
     setStatus('verifying');
-    const verified = await verifyIdentityCheck(wallet, identity!, result as unknown as Record<string, unknown>);
-    if (verified.mode === 'onchain') {
+    let verified: Awaited<ReturnType<typeof verifyIdentityCheck>>;
+    try {
+      verified = await verifyIdentityCheck(wallet, identity!, result as unknown as Record<string, unknown>);
+    } catch (error) {
+      // Only a rejected PROOF may reject handleVerify: IDKit turns that into its
+      // "Verification declined" screen. Surface the reason instead of swallowing it.
+      const detail = error instanceof Error ? error.message : 'Identity Check verification failed.';
+      setStatus('error'); setMessage(detail);
+      throw error;
+    }
+
+    // The proof is verified from here on: a failed wallet step is not a proof failure.
+    if (verified.mode !== 'onchain') {
+      setStatus('verified'); setMessage(verified.message);
+      await onComplete(verified.message);
+      return;
+    }
+    try {
       const hash = await submitClaim(verified.claim);
       setStatus('verified'); setMessage('Identity Check verified. Your wallet submitted the KYC_VERIFIED claim.');
       await onComplete('Identity Check claim submitted from your wallet.', hash);
-    } else {
-      setStatus('verified'); setMessage(verified.message);
-      await onComplete(verified.message);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'The claim could not be submitted.';
+      setStatus('error');
+      setMessage(`Identity Check verified, but the on-chain claim was not submitted: ${detail}`);
     }
   };
 
@@ -86,7 +103,7 @@ export function WorldIdPersonhoodCard({ wallet, identity, status: initialStatus,
       <motion.button whileHover={status === 'preparing' || status === 'verifying' || status === 'verified' || reduceMotion ? undefined : { scale: 1.01 }} whileTap={status === 'preparing' || status === 'verifying' || status === 'verified' || reduceMotion ? undefined : { scale: 0.99 }} onClick={start} disabled={status === 'preparing' || status === 'verifying' || status === 'verified'} className="mt-6 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none">
         {label}
       </motion.button>
-      {request && <IDKitRequestWidget open={open} onOpenChange={setOpen} app_id={request.app_id} action={request.action} rp_context={request.rp_context as RpContext} environment="staging" preset={identityCheck({ attributes: [{ type: 'document_type', value: 'passport' }, { type: 'minimum_age', value: 18 }] })} allow_legacy_proofs={false} handleVerify={handleVerify} onSuccess={() => setOpen(false)} onError={(code) => { setStatus('error'); setMessage(code === 'user_rejected' ? 'Identity Check was cancelled.' : 'Identity Check could not complete verification.'); }} />}
+      {request && <IDKitRequestWidget open={open} onOpenChange={setOpen} app_id={request.app_id} action={request.action} rp_context={request.rp_context as RpContext} environment="staging" preset={identityCheck({ attributes: [{ type: 'document_type', value: 'passport' }, { type: 'minimum_age', value: 18 }] })} allow_legacy_proofs={false} handleVerify={handleVerify} onSuccess={() => setOpen(false)} onError={(code) => { setStatus('error'); setMessage(code === 'user_rejected' ? 'Identity Check was cancelled.' : `Identity Check could not complete verification (${code}).`); }} />}
     </motion.div>
   );
 }

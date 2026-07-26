@@ -1,9 +1,11 @@
-export const PRODUCT_NAME = 'PassportCreds by Node';
-export const PRODUCT_SHORT = 'PassportCreds';
+export const PRODUCT_NAME = 'Passport Kit Node';
+export const PRODUCT_SHORT = 'Passport Kit';
+// TENANT_ID and RESOURCE_ID are functional identifiers sent to the API
+// (see modules/access/access.service.ts). Display names only are rebranded.
 export const TENANT_ID = 'node-proptech';
 export const TENANT_NAME = 'Node PropTech';
 export const RESOURCE_ID = 'node-oklahoma-deal-room';
-export const RESOURCE_NAME = 'Oklahoma Real Estate Deal Room';
+export const RESOURCE_NAME = 'Fractional Property Access Gate';
 
 export const CLAIM_LABELS = {
   KYC_AML_VERIFIED: 'KYC / AML Verified',

@@ -3,8 +3,9 @@ import './globals.css';
 import { PrivyAppProvider } from '@/providers/PrivyAppProvider';
 
 export const metadata: Metadata = {
-  title: 'PassportCreds by Node',
-  description: 'White-label Compliance Passport for regulated access.',
+  title: 'Passport Kit Node',
+  description:
+    'Give an AI agent real authority over a real asset. Take it back in one transaction. An identity and authorization layer for AI agents operating tokenized real-world assets.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

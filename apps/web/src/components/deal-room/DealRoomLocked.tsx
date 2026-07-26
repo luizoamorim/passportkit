@@ -12,7 +12,7 @@ export function DealRoomLocked() {
         Access Required
       </p>
       <p className="mb-6 max-w-sm text-sm leading-6 text-slate-400">
-        This Deal Room requires a valid Compliance Passport. Complete verification to continue.
+        This gated surface is an Access Gate example. It requires a valid Passport with the required claims.
       </p>
       <Link
         href="/passport"

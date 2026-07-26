@@ -1,8 +1,10 @@
 import type { TransactionItem } from '@/modules/passport/passport.types';
 import { formatTxHash } from '@/lib/format';
 
+// Ethereum Sepolia is the project network; the previous Base Sepolia default sent
+// transaction links to the wrong explorer.
 const EXPLORER_BASE =
-  process.env.NEXT_PUBLIC_EXPLORER_URL ?? 'https://sepolia.basescan.org';
+  process.env.NEXT_PUBLIC_EXPLORER_URL ?? 'https://sepolia.etherscan.io';
 
 const CONTRACT_COLORS: Record<string, string> = {
   ClaimRegistry: 'text-[#4A9EFF] bg-[#4A9EFF]/10',

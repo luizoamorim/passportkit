@@ -92,7 +92,7 @@ export function ComplianceProgressStepper({
     { label: 'Selfie Personhood', status: getStepStatus(personhoodStatus ?? kycStatus) },
     { label: 'Identity KYC', status: getStepStatus(kycStatus) },
     { label: 'Passport Claim', status: passportStepStatus() },
-    { label: 'Deal Room Access', status: dealRoomStatus() },
+    { label: 'Access Gate', status: dealRoomStatus() },
   ] : [
     {
       label: 'Wallet Connected',
@@ -111,7 +111,7 @@ export function ComplianceProgressStepper({
       status: passportStepStatus(),
     },
     {
-      label: 'Deal Room Access',
+      label: 'Access Gate',
       status: dealRoomStatus(),
     },
   ];
@@ -119,7 +119,7 @@ export function ComplianceProgressStepper({
   return (
     <div className="bg-white border border-[#DDE1EA] rounded-2xl p-5 shadow-sm">
       <p className="text-[11px] font-semibold tracking-widest uppercase text-[#4A9EFF] mb-4">
-        Compliance Flow
+        Owner verification
       </p>
       <div className="flex items-start gap-0">
         {steps.map((step, i) => {

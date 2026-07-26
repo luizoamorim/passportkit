@@ -7,8 +7,8 @@ export function DealRoomUnlocked() {
         <div className="flex items-start gap-3">
           <span className="text-2xl">✅</span>
           <div>
-            <p className="font-bold text-white text-base">Deal Room unlocked.</p>
-            <p className="mt-1 text-sm text-slate-300">Your PassportCreds passport is verified and active.</p>
+            <p className="font-bold text-white text-base">Access Gate opened.</p>
+            <p className="mt-1 text-sm text-slate-300">Your Passport is verified and active.</p>
           </div>
         </div>
       </div>

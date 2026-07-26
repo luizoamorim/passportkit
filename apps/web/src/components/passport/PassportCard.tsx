@@ -12,49 +12,49 @@ const STATUS_CONFIG: Record<
     glow: '',
     label: 'No Passport',
     labelColor: 'text-[#9CA3AF]',
-    copy: 'No Compliance Passport yet. Start verification to unlock regulated access.',
+    copy: 'No Passport yet. Complete verification to establish verified ownership.',
   },
   IN_PROGRESS: {
     border: 'border-blue-200',
     glow: 'shadow-blue-100',
     label: 'In Progress',
     labelColor: 'text-blue-500',
-    copy: 'Compliance verification is in progress. Please wait.',
+    copy: 'Eligibility verification is in progress. Please wait.',
   },
   LIMITED: {
     border: 'border-amber-300',
     glow: 'shadow-amber-100',
     label: 'Limited',
     labelColor: 'text-amber-500',
-    copy: 'Compliance Passport issued with limited access. KYC / AML is verified, but Accredited Investor verification is missing.',
+    copy: 'Passport issued with limited eligibility. Some required claims are still missing.',
   },
   GREEN: {
     border: 'border-emerald-200',
     glow: 'shadow-emerald-100',
     label: 'Full Access',
     labelColor: 'text-emerald-700',
-    copy: 'Compliance Passport GREEN. All required badges are verified.',
+    copy: 'Passport GREEN. All required claims are verified.',
   },
   RED: {
     border: 'border-red-300',
     glow: 'shadow-red-100',
     label: 'Blocked',
     labelColor: 'text-red-500',
-    copy: 'Compliance Passport RED. Access is blocked due to failed critical compliance checks.',
+    copy: 'Passport RED. The Access Gate blocks protected actions for this owner.',
   },
   REVOKED: {
     border: 'border-red-300',
     glow: 'shadow-red-100',
     label: 'Revoked',
     labelColor: 'text-red-600',
-    copy: 'Compliance Passport has been revoked.',
+    copy: 'This Passport has been revoked.',
   },
   EXPIRED: {
     border: 'border-amber-200',
     glow: 'shadow-amber-100',
     label: 'Expired',
     labelColor: 'text-amber-500',
-    copy: 'Compliance Passport has expired. Please re-verify.',
+    copy: 'This Passport has expired. Please re-verify.',
   },
 };
 
@@ -85,9 +85,12 @@ export function PassportCard({ walletAddress, status, badges, passportTokenId, p
             </span>
           </h2>
         </div>
-        <div className={`rounded-full border border-current/10 bg-current/10 px-3 py-1 text-xs font-bold ${cfg.labelColor}`}>
-          <span className={cfg.labelColor}>{cfg.label}</span>
-        </div>
+        {/* No badge before a Passport exists — the empty state already reads as "not yet". */}
+        {status !== 'NONE' && (
+          <div className={`rounded-full border border-current/10 bg-current/10 px-3 py-1 text-xs font-bold ${cfg.labelColor}`}>
+            <span className={cfg.labelColor}>{cfg.label}</span>
+          </div>
+        )}
       </div>
 
       <div className="mb-5 rounded-2xl bg-slate-50 px-4 py-3">

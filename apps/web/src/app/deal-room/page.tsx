@@ -91,7 +91,7 @@ export default function DealRoomPage() {
           <p className="text-4xl mb-4">🔒</p>
           <h2 className="text-2xl font-bold text-white mb-2">Login to continue.</h2>
           <p className="text-[#8FA0C0] mb-6 max-w-sm">
-            Login with your email to access this Deal Room.
+            Login with your email to access this gated surface.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             {HAS_PRIVY ? (
@@ -154,7 +154,7 @@ export default function DealRoomPage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-xs font-bold text-white shadow-lg shadow-blue-950/30">
               <span>PK</span>
             </div>
-            <span><span className="block text-sm font-bold text-white">{PRODUCT_NAME}</span><span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Secure deal room</span></span>
+            <span><span className="block text-sm font-bold text-white">{PRODUCT_NAME}</span><span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Gated access example</span></span>
           </Link>
           <div className="flex items-center gap-3">
             {walletAddress && (

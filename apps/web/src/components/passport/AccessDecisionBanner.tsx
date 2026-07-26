@@ -14,12 +14,12 @@ export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Prop
           <span className="text-2xl">✅</span>
           <div>
             <p className="text-base font-bold text-emerald-950">Access granted</p>
-            <p className="mt-1 text-sm leading-6 text-emerald-800">Your compliance passport is verified and active.</p>
+            <p className="mt-1 text-sm leading-6 text-emerald-800">Your Passport is verified and active. The Access Gate allows protected actions.</p>
             <Link
               href="/deal-room"
               className="mt-4 inline-block rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-800"
             >
-              Enter Deal Room →
+              Open gated surface →
             </Link>
           </div>
         </div>
@@ -35,13 +35,13 @@ export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Prop
           <div>
             <p className="text-base font-bold text-amber-950">Limited access</p>
             <p className="mt-1 text-sm leading-6 text-amber-900">
-              Investor actions disabled until Accredited Investor badge is verified.
+              Some protected actions stay blocked until the remaining claims are verified.
             </p>
             <Link
               href="/deal-room"
               className="mt-4 inline-block rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-bold text-amber-900 transition hover:bg-amber-100"
             >
-              Enter Deal Room →
+              Open gated surface →
             </Link>
           </div>
         </div>
@@ -57,7 +57,7 @@ export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Prop
           <div>
             <p className="font-bold text-red-600 text-base">Access Denied</p>
             <p className="text-sm text-[#4B5568] mt-0.5">
-              Required compliance claims are missing or failed.
+              Required claims are missing or failed. The Access Gate refuses protected actions.
             </p>
           </div>
         </div>
@@ -70,9 +70,9 @@ export function AccessDecisionBanner({ passportStatus, canAccessDealRoom }: Prop
       <div className="flex items-start gap-3">
         <span className="text-2xl">🔒</span>
         <div>
-          <p className="text-base font-bold text-[#0D1428]">Deal Room locked</p>
+          <p className="text-base font-bold text-[#0D1428]">Access Gate closed</p>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Complete compliance verification to continue.
+            Complete owner verification to open protected actions.
           </p>
         </div>
       </div>

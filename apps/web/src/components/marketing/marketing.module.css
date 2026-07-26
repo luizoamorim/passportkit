@@ -1,0 +1,953 @@
+/* Marketing page (route: /services). Scoped module so it cannot leak into the
+   Passport Kit Node dashboard or landing styles. */
+
+.page {
+  --background: #fcfcfa;
+  --soft-background: #f1f4f2;
+  --primary-green: #42e18e;
+  --bright-green: #43e390;
+  --light-green: #bffff0;
+  --inactive-grey: #d5d5d5;
+  --body-grey: #656565;
+  --divider: rgba(0, 0, 0, 0.12);
+  --black: #050505;
+  --white: #ffffff;
+  --purple-media: #5144d4;
+
+  font-family: 'Poppins', 'Inter', Arial, sans-serif;
+  background: var(--background);
+  color: var(--black);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* `clip` rather than `hidden`: hidden would make this a scroll container and
+     break the sticky stage inside it. */
+  overflow-x: clip;
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
+}
+
+/* ---------------------------------------------------------------- header --- */
+
+.header {
+  position: fixed;
+  top: 20px;
+  left: 0;
+  width: 100%;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px 0 44px;
+  pointer-events: none;
+}
+
+.header > * {
+  pointer-events: auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 200px;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+  color: var(--black);
+  text-decoration: none;
+}
+
+.logoMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--primary-green), var(--light-green));
+  flex: none;
+}
+
+.navPill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 76px;
+  padding: 0 10px 0 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  max-width: 850px;
+}
+
+.navLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 22px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--black);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.navLink:hover {
+  opacity: 0.55;
+}
+
+.navLink + .navLink::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 18px;
+  width: 1px;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.chevron {
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.navCta {
+  margin-left: 14px;
+  height: 56px;
+  padding: 0 30px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--primary-green);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.navCta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(66, 225, 142, 0.4);
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btnGhost,
+.btnSolid {
+  height: 56px;
+  padding: 0 30px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.btnGhost {
+  background: var(--white);
+  color: var(--black);
+  border: 1.5px solid var(--black);
+}
+
+.btnSolid {
+  background: var(--black);
+  color: var(--white);
+  border: 1.5px solid var(--black);
+}
+
+.btnGhost:hover,
+.btnSolid:hover {
+  transform: translateY(-1px);
+}
+
+/* mobile header */
+.headerMobile {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 54px;
+  z-index: 100;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.menuButton {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--black);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.menuButton span {
+  display: block;
+  width: 16px;
+  height: 1.5px;
+  background: var(--white);
+  border-radius: 2px;
+}
+
+.mobilePanel {
+  position: fixed;
+  inset: 54px 0 0 0;
+  z-index: 99;
+  background: var(--background);
+  padding: 28px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobilePanel a {
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--black);
+  text-decoration: none;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.page :focus-visible {
+  outline: 3px solid var(--primary-green);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* -------------------------------------------------------------- services --- */
+
+.services {
+  position: relative;
+  width: 100%;
+}
+
+/* Base = no JavaScript enhancement: everything sits in normal flow and is visible.
+   The pinned experience is layered on only when ServicesScrollSection confirms it is
+   active, via [data-enhanced]. One source of truth, so CSS and JS cannot disagree. */
+.stage {
+  position: static;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  background: var(--background);
+}
+
+.wordWrap {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate3d(-50%, -50%, 0);
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform, opacity;
+}
+
+.word {
+  position: relative;
+  display: block;
+  white-space: nowrap;
+  font-size: clamp(190px, 17vw, 340px);
+  font-weight: 700;
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  margin: 0;
+}
+
+.wordBase {
+  color: var(--inactive-grey);
+}
+
+/* Green copy sits exactly on top; clip-path is driven by scroll progress. */
+.wordFill {
+  position: absolute;
+  inset: 0;
+  color: var(--primary-green);
+  clip-path: inset(0 0 0 0);
+  will-change: clip-path;
+}
+
+.track {
+  position: static;
+  width: min(900px, 92vw);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 42px;
+  z-index: 2;
+  will-change: transform;
+}
+
+/* ---- enhanced (pinned) layout, enabled by ServicesScrollSection only ---- */
+
+.services[data-enhanced='true'] .stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.services[data-enhanced='true'] .wordWrap {
+  display: block;
+}
+
+.services[data-enhanced='true'] .servicesMobileTitle {
+  display: none;
+}
+
+.services[data-enhanced='true'] .track {
+  position: absolute;
+  left: 50%;
+  top: 100vh;
+  margin: 0;
+  transform: translate3d(-50%, 0, 0);
+  width: min(900px, 48vw);
+}
+
+/* ----------------------------------------------------------------- cards --- */
+
+.card {
+  background: var(--white);
+  border-radius: 26px;
+  padding: 24px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.cardDark {
+  background: var(--black);
+  color: var(--white);
+}
+
+.cardIcon {
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary-green), #d9f97f);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  color: var(--black);
+  flex: none;
+}
+
+.cardIconGlobe {
+  background: linear-gradient(135deg, #42e18e, #4aa8ff 55%, #7a5cf0);
+}
+
+.cardTitle {
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  margin: 18px 0 0;
+  white-space: pre-line;
+}
+
+.cardBody {
+  font-size: 19px;
+  line-height: 1.35;
+  color: var(--body-grey);
+  margin: 16px 0 0;
+}
+
+.cardDark .cardBody {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.cardSplit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+
+.media {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* card 1 — box */
+.mediaBox {
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(160deg, #efe9df, #e2dbcf);
+  margin-top: 20px;
+  perspective: 900px;
+}
+
+.boxScene {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+}
+
+.boxBody {
+  position: relative;
+  width: 42%;
+  aspect-ratio: 3 / 2;
+  background: #fdfdfd;
+  border-radius: 6px;
+  box-shadow: 0 26px 50px rgba(0, 0, 0, 0.18);
+  transform-style: preserve-3d;
+}
+
+.boxFlap {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 46%;
+  background: #f4f4f2;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  will-change: transform;
+}
+
+.boxFlapBack {
+  top: 0;
+  transform-origin: top center;
+  background: #eceae5;
+}
+
+.boxFlapFront {
+  bottom: 0;
+  transform-origin: bottom center;
+}
+
+.boxCard {
+  position: absolute;
+  left: 50%;
+  bottom: 26%;
+  width: 62%;
+  aspect-ratio: 1.586;
+  margin-left: -31%;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--primary-green), #23b4ff);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.26);
+  will-change: transform;
+}
+
+/* card 2 — tiles */
+.tileGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.tile {
+  background: #f4f5f4;
+  border-radius: 10px;
+  padding: 20px 18px;
+  min-height: 132px;
+  display: flex;
+  align-items: flex-end;
+  font-size: 17px;
+  font-weight: 500;
+  color: #8b8b8b;
+  will-change: transform;
+}
+
+.tileSwatch {
+  min-height: 132px;
+  background: linear-gradient(150deg, #eef0ee, #e3e6e3);
+}
+
+/* card 3 — currency */
+.mediaCurrency {
+  aspect-ratio: 3 / 2;
+  background: var(--purple-media);
+  margin-top: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.noteFan {
+  position: relative;
+  width: 70%;
+  height: 46%;
+}
+
+.note {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40%;
+  aspect-ratio: 1.7;
+  margin: -12% 0 0 -20%;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ffffff, #dfe3ff);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.25);
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #3d3a7a;
+  will-change: transform;
+}
+
+.exchangePill {
+  position: absolute;
+  bottom: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 30px;
+  border-radius: 999px;
+  background: var(--primary-green);
+  color: var(--white);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* card 4 — planet */
+.mediaPlanet {
+  aspect-ratio: 16 / 9;
+  background: radial-gradient(circle at 50% 120%, #14203f 0%, #05070f 65%);
+  margin-top: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 22%, #fff, transparent),
+    radial-gradient(1.2px 1.2px at 68% 14%, #fff, transparent),
+    radial-gradient(1.6px 1.6px at 82% 62%, #fff, transparent),
+    radial-gradient(1.1px 1.1px at 28% 74%, #fff, transparent),
+    radial-gradient(1.3px 1.3px at 45% 40%, #fff, transparent),
+    radial-gradient(1px 1px at 92% 34%, #fff, transparent);
+  opacity: 0.8;
+}
+
+.planet {
+  position: relative;
+  width: 46%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 30%, #4fd2ff 0%, #1f7fd6 38%, #0d3f86 70%, #06214d 100%);
+  box-shadow: inset -18px -12px 46px rgba(0, 0, 0, 0.6), 0 0 70px rgba(60, 150, 255, 0.34);
+  overflow: hidden;
+  will-change: transform;
+}
+
+.planetLand {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(ellipse 22% 13% at 30% 36%, rgba(80, 220, 150, 0.85), transparent),
+    radial-gradient(ellipse 17% 10% at 62% 54%, rgba(80, 220, 150, 0.72), transparent),
+    radial-gradient(ellipse 13% 9% at 46% 72%, rgba(80, 220, 150, 0.6), transparent);
+}
+
+.ctaButton {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  text-decoration: none;
+  width: 100%;
+  height: 96px;
+  margin-top: 42px;
+  border: 0;
+  border-radius: 24px;
+  background: var(--primary-green);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  box-shadow: 0 18px 44px rgba(66, 225, 142, 0.34);
+  transition: transform 0.22s ease;
+}
+
+.ctaButton:hover {
+  transform: translateY(-2px);
+}
+
+/* Services heading in flow. Hidden only when the pinned stage takes over. */
+.servicesMobileTitle {
+  display: block;
+  margin: 0 auto 30px;
+  width: min(900px, 92vw);
+  font-size: clamp(58px, 9vw, 130px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+  color: var(--primary-green);
+}
+
+/* -------------------------------------------------------------- security --- */
+
+.security {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--soft-background);
+  min-height: 105vh;
+  padding: 170px 0 150px;
+}
+
+.securityGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 40px;
+  align-items: start;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 0 40px 0 11vw;
+}
+
+.securityHeading {
+  font-size: clamp(72px, 6.5vw, 126px);
+  line-height: 0.94;
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  margin: 0;
+}
+
+.headingLine {
+  display: block;
+  color: #cfcfcf;
+  opacity: 0.25;
+  filter: blur(11px);
+  transform: translateY(18px);
+  will-change: filter, opacity, transform, color;
+}
+
+.fanWrap {
+  position: relative;
+  margin-top: 70px;
+  width: min(900px, 46vw);
+  margin-left: -70px;
+  will-change: transform, opacity;
+}
+
+/* CSS stand-in for the fanned-cards asset; replaced when the real image lands. */
+.fanPlaceholder {
+  position: relative;
+  aspect-ratio: 16 / 10;
+}
+
+.fanCard {
+  position: absolute;
+  left: 12%;
+  top: 26%;
+  width: 52%;
+  aspect-ratio: 1.586;
+  border-radius: 16px;
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.22);
+  transform-origin: 12% 88%;
+}
+
+.benefits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.benefit {
+  opacity: 0;
+  transform: translateY(25px);
+  filter: blur(4px);
+  will-change: transform, opacity, filter;
+}
+
+.benefitHead {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.benefitIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--white);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.benefitIcon i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: var(--primary-green);
+}
+
+.benefitTitle {
+  font-size: 38px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.benefitBody {
+  margin: 18px 0 0;
+  font-size: 21px;
+  line-height: 1.32;
+  color: #666666;
+  max-width: 680px;
+}
+
+.benefitDivider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.13);
+  margin: 30px 0;
+  border: 0;
+}
+
+/* ------------------------------------------------------------- responsive --- */
+
+@media (max-width: 1023px) {
+  .header {
+    display: none;
+  }
+
+  .headerMobile {
+    display: flex;
+  }
+
+  /* No pinning: the stage becomes a normal block in the flow. */
+  .services {
+    height: auto !important;
+    padding: 96px 0 40px;
+  }
+
+  .stage {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+
+  .wordWrap {
+    display: none;
+  }
+
+  .servicesMobileTitle {
+    display: block;
+    margin: 0 0 26px;
+    padding-inline: 12px;
+    font-size: clamp(58px, 15vw, 70px);
+    font-weight: 700;
+    line-height: 0.95;
+    letter-spacing: -0.05em;
+    color: var(--primary-green);
+  }
+
+  .track {
+    position: static;
+    transform: none !important;
+    width: calc(100% - 40px);
+    max-width: 680px;
+    margin: 0 auto;
+    gap: 23px;
+  }
+
+  .card {
+    border-radius: 15px;
+    padding: 13px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  .cardIcon {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+  }
+
+  .cardTitle {
+    font-size: 27px;
+    margin-top: 14px;
+  }
+
+  .cardBody {
+    font-size: 15px;
+    line-height: 1.28;
+  }
+
+  .cardSplit {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .mediaBox {
+    aspect-ratio: 4 / 3;
+  }
+
+  .mediaPlanet {
+    aspect-ratio: 3 / 4;
+  }
+
+  .mediaCurrency {
+    aspect-ratio: 4 / 3;
+  }
+
+  .tile {
+    min-height: 104px;
+    font-size: 15px;
+  }
+
+  .ctaButton {
+    height: 64px;
+    font-size: 24px;
+    border-radius: 16px;
+    margin-top: 26px;
+  }
+
+  .security {
+    min-height: 0;
+    background: #eef1ef;
+    padding: 128px 16px 64px;
+  }
+
+  .securityGrid {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+    gap: 0;
+  }
+
+  .securityHeading {
+    font-size: clamp(48px, 13vw, 57px);
+    line-height: 1;
+    margin-bottom: 64px;
+  }
+
+  /* Image moves after the benefits list on mobile. */
+  .fanWrap {
+    order: 2;
+    width: 110%;
+    margin-left: -5%;
+    margin-top: 40px;
+  }
+
+  .benefitsWrap {
+    order: 1;
+  }
+
+  .benefit {
+    padding: 23px 0 27px;
+  }
+
+  .benefitIcon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .benefitTitle {
+    font-size: 26px;
+    line-height: 1.1;
+  }
+
+  .benefitBody {
+    font-size: 16px;
+    margin-top: 12px;
+  }
+
+  .benefitDivider {
+    margin: 0;
+  }
+}
+
+@media (max-width: 1023px) and (min-width: 768px) {
+  .cardTitle {
+    font-size: 32px;
+  }
+
+  .benefitTitle {
+    font-size: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No ScrollTrigger is created in this mode, so the stage must not stay pinned —
+     otherwise the track would sit permanently below the fold. */
+  .services {
+    height: auto !important;
+    padding: 120px 0 40px;
+  }
+
+  .stage {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+
+  .wordWrap {
+    display: none;
+  }
+
+  .servicesMobileTitle {
+    display: block;
+    margin: 0 auto 26px;
+    width: min(900px, 92vw);
+    font-size: clamp(58px, 9vw, 120px);
+    font-weight: 700;
+    line-height: 0.95;
+    letter-spacing: -0.05em;
+    color: var(--primary-green);
+  }
+
+  .track {
+    position: static;
+    transform: none !important;
+    margin: 0 auto;
+    width: min(900px, 92vw);
+  }
+
+  .headingLine,
+  .benefit {
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+    color: var(--black) !important;
+  }
+
+  .fanWrap {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .page * {
+    transition-duration: 0.01ms !important;
+  }
+}

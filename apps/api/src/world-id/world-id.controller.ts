@@ -18,6 +18,12 @@ class VerifyWorldIdDto {
   metadata?: Record<string, unknown>;
 }
 
+/** TEMP: body for the isolated /world-id-debug route. */
+class DebugVerifyDto {
+  @IsObject()
+  idkitResponse!: Record<string, unknown>;
+}
+
 /** World ID endpoints belong to the new API; proofs are always checked server-side. */
 @Controller('world-id')
 export class WorldIdController {
@@ -37,6 +43,18 @@ export class WorldIdController {
   @Post('selfie/request')
   createSelfieRequest() {
     return this.worldId.createSelfieRequest();
+  }
+
+  /** TEMP debug pair for /world-id-debug: no wallet, no identity, no claim. Remove after triage. */
+  @Post('debug/request')
+  createDebugRequest() {
+    return this.worldId.createIdentityRequest();
+  }
+
+  @Post('debug/verify')
+  @HttpCode(HttpStatus.OK)
+  debugVerify(@Body() dto: DebugVerifyDto) {
+    return this.worldId.debugVerify(dto.idkitResponse);
   }
 
   @Post('verify')
