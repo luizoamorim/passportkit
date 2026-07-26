@@ -15,9 +15,13 @@ import {
   readPassportStatus,
   readComplianceStatus,
   readAgentEns,
+  readPoolRefusal,
   newAgentWallet,
   agentTransfer,
+  agentSwap,
+  RefusedError,
   type PassportStatus,
+  type Surface,
 } from '@/lib/hero-chain';
 import { useEthProvider } from '@/lib/useEthProvider';
 import { shortenAddress } from '@/lib/format';
@@ -26,6 +30,8 @@ const SEP = 'https://sepolia.etherscan.io/tx/';
 
 type TxItem = { label: string; hash: string };
 type Agent = { address: Address; privateKey: Hex; ensName: string };
+/** What one enforcement surface did on the agent's last attempt. */
+type SurfaceResult = { hash: string | null; refusal: { code: string | null; message: string } | null };
 
 const STATUS_STYLE: Record<PassportStatus, string> = {
   NONE: 'bg-[#F0F2F6] text-[#9CA3AF] border-[#DDE1EA]',
@@ -33,6 +39,33 @@ const STATUS_STYLE: Record<PassportStatus, string> = {
   GREEN: 'bg-[#EAF7F0] text-[#0B7A4B] border-[#B8E6CE]',
   REVOKED: 'bg-red-50 text-red-700 border-red-200',
 };
+
+/**
+ * The two surfaces the agent acts on. They share ONE EligibilityGate and one identity, which is the
+ * whole point: revoking the person refuses both at once, in the same transaction the agent signs.
+ */
+const SURFACES: { key: Surface; title: string; note: string; action: string; tx: string }[] = [
+  {
+    key: 'token',
+    title: 'Compliant token — GatedERC20 transfer',
+    note: 'The token gates its own transfers: it resolves the agent to your identity before it moves.',
+    action: 'Agent transfers Casa Azul tokens',
+    tx: 'agent transfer (GatedERC20)',
+  },
+  {
+    key: 'pool',
+    title: 'Compliant pool — Uniswap v4 swap',
+    note: 'A real v4 swap (mCASA to mUSDC). ComplianceHook runs beforeSwap and asks the same gate.',
+    action: 'Agent swaps in the compliant pool',
+    tx: 'agent swap (Uniswap v4)',
+  },
+];
+
+const EMPTY_SURFACE: SurfaceResult = { hash: null, refusal: null };
+
+/// One row per attempt: the surface acting (step 5) and the same surface retrying (step 6) are
+/// separate outcomes, and doubles as the `busy` key so only the clicked button spins.
+const attemptKey = (surface: Surface, retry: boolean) => `${surface}${retry ? '-retry' : ''}`;
 
 export default function HeroPage() {
   const { address } = useWallet();
@@ -46,8 +79,11 @@ export default function HeroPage() {
   const [status, setStatus] = useState<PassportStatus>('NONE');
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentEns, setAgentEns] = useState<{ registration: string; reputation: string } | null>(null);
-  const [casaOk, setCasaOk] = useState<string | null>(null);
-  const [casaFail, setCasaFail] = useState<string | null>(null);
+  // Keyed by attempt ('token', 'pool', and their '-retry' twins) so the money moment's rows start
+  // empty instead of inheriting the green check the same surface earned before the revocation.
+  const [attempts, setAttempts] = useState<Record<string, SurfaceResult>>({});
+  // The pool's own live view of the agent: the reason code its next swap would revert with, or null.
+  const [poolReason, setPoolReason] = useState<string | null>(null);
   const [txs, setTxs] = useState<TxItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -65,6 +101,17 @@ export default function HeroPage() {
     setStatus(s);
     setEnsStatus(e);
   }, [identity, ensName]);
+
+  // Read the pool's standing on the agent alongside the passport — it is the fourth surface's own
+  // answer, not ours, so the revoke shows up here without the agent having to try anything.
+  const refreshPoolReason = useCallback(async () => {
+    if (!agent) return;
+    setPoolReason(await readPoolRefusal(agent.address).catch(() => null));
+  }, [agent]);
+
+  useEffect(() => {
+    refreshPoolReason();
+  }, [refreshPoolReason, status]);
 
   useEffect(() => {
     refreshStatus();
@@ -153,29 +200,41 @@ export default function HeroPage() {
       setAgentEns(e);
     });
 
-  const doCasaTransfer = (retry: boolean) =>
-    run(retry ? 'casa-retry' : 'casa', async () => {
+  /**
+   * One agent action, on one surface. A REFUSAL is the demo, not a failure: it lands in the surface's
+   * own panel with the chain's reason code, and only a genuine error (RPC, gas) reaches the banner.
+   */
+  const doSurface = (surface: Surface, retry: boolean) => {
+    const key = attemptKey(surface, retry);
+    return run(key, async () => {
       if (!agent || !wallet) return;
-      setCasaFail(null);
+      const spec = SURFACES.find((s) => s.key === surface)!;
+      setAttempts((p) => ({ ...p, [key]: EMPTY_SURFACE }));
       try {
-        const hash = await agentTransfer({ agentPrivateKey: agent.privateKey, to: wallet });
-        setCasaOk(hash);
-        addTx('agent transfer', hash);
+        const hash =
+          surface === 'token'
+            ? await agentTransfer({ agentPrivateKey: agent.privateKey, to: wallet })
+            : await agentSwap({ agentPrivateKey: agent.privateKey });
+        setAttempts((p) => ({ ...p, [key]: { hash, refusal: null } }));
+        addTx(spec.tx, hash);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'transfer reverted';
-        // surface the eligibility refusal reason
-        const reason = /NotEligible|not eligible|MISSING_KYC|reverted/i.test(msg) ? msg : msg;
-        setCasaFail(reason);
-        setCasaOk(null);
-        throw e;
+        if (!(e instanceof RefusedError)) throw e;
+        const message = e.code
+          ? `Refused on-chain — reason code ${e.code}`
+          : 'Refused on-chain by the compliance check';
+        setAttempts((p) => ({ ...p, [key]: { hash: null, refusal: { code: e.code, message } } }));
+      } finally {
+        await refreshPoolReason();
       }
     });
+  };
 
   const doRevoke = () =>
     run('revoke', async () => {
       if (!identity) return;
       await revokeClaim(identity, 'KYC_VERIFIED', true);
       await refreshStatus();
+      await refreshPoolReason();
     });
 
   const step = (n: number, title: string, done: boolean, children: React.ReactNode) => (
@@ -194,6 +253,56 @@ export default function HeroPage() {
     </div>
   );
 
+  /**
+   * One enforcement surface: what it is, the agent's button, and the outcome. `retry` is the same row
+   * after the revocation — same call, opposite answer.
+   */
+  const surfaceRow = (spec: (typeof SURFACES)[number], retry: boolean) => {
+    const key = attemptKey(spec.key, retry);
+    const result = attempts[key] ?? EMPTY_SURFACE;
+    return (
+      <div key={key} className="rounded-xl border border-[#DDE1EA] bg-[#F8F9FC] p-3 space-y-2">
+        <p className="text-xs font-semibold text-[#0D1428]">{spec.title}</p>
+        {!retry && <p className="text-[11px] text-[#9CA3AF]">{spec.note}</p>}
+        <button
+          onClick={() => doSurface(spec.key, retry)}
+          disabled={busy === key}
+          className={`text-sm font-semibold px-4 py-2.5 rounded-lg w-full disabled:opacity-40 ${
+            retry
+              ? 'border border-red-300 text-red-700 hover:bg-red-50'
+              : 'bg-[#0D1428] text-white hover:bg-[#141E38]'
+          }`}
+        >
+          {busy === key ? 'Transacting…' : retry ? 'Retry' : spec.action}
+        </button>
+        {result.hash && (
+          <a
+            href={`${SEP}${result.hash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="block text-[11px] text-[#0B7A4B] hover:underline"
+          >
+            ✓ Confirmed on Sepolia ↗
+          </a>
+        )}
+        {result.refusal && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 space-y-1">
+            <p className="text-[11px] text-red-700">✗ {result.refusal.message}</p>
+            {result.refusal.code && (
+              <span className="inline-block font-mono text-[10px] font-semibold text-red-700 border border-red-200 bg-white rounded px-2 py-0.5">
+                {result.refusal.code}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // One surface cleared is enough to unlock the money moment: the demo must never be stuck behind
+  // a surface that is having an off day.
+  const surfaceCleared = SURFACES.some((s) => attempts[attemptKey(s.key, false)]?.hash);
+
   return (
     <div className="max-w-3xl mx-auto px-6 py-8 space-y-4">
       <div>
@@ -208,7 +317,7 @@ export default function HeroPage() {
         </h1>
         <p className="text-sm text-[#4B5568] mt-1">
           Verify with World ID, get a live ENS name, delegate to an agent — then watch one revocation
-          cut the agent off from Casa Azul&apos;s compliant liquidity.
+          cut the agent off from Casa Azul&apos;s compliant token and its Uniswap v4 pool at once.
         </p>
       </div>
 
@@ -354,31 +463,25 @@ export default function HeroPage() {
           </div>
         ))}
 
-      {/* Step 6 — Casa Azul liquidity */}
+      {/* Step 6 — Casa Azul liquidity, on BOTH enforcement surfaces */}
       {agent &&
-        step(5, 'Casa Azul liquidity — your agent acts', !!casaOk, (
-          <div className="space-y-2">
+        step(5, 'Casa Azul liquidity — your agent acts', surfaceCleared, (
+          <div className="space-y-3">
             <p className="text-xs text-[#4B5568]">
-              The agent moves Casa Azul&apos;s compliant token (GatedERC20). The gate resolves the
-              agent → your identity → your eligibility.
+              Two enforcement surfaces, one decision. Both resolve the agent → your identity → your
+              eligibility, and both ask the same <span className="font-mono">EligibilityGate</span>.
             </p>
-            <button
-              onClick={() => doCasaTransfer(false)}
-              disabled={busy === 'casa'}
-              className="text-sm font-semibold px-4 py-2.5 rounded-lg bg-[#0D1428] text-white disabled:opacity-40 w-full"
-            >
-              {busy === 'casa' ? 'Transacting…' : 'Agent transacts on Casa Azul'}
-            </button>
-            {casaOk && (
-              <a href={`${SEP}${casaOk}`} target="_blank" rel="noreferrer" className="text-[11px] text-[#0B7A4B] hover:underline block">
-                ✓ Agent transfer confirmed ↗
-              </a>
-            )}
+            {SURFACES.map((s) => surfaceRow(s, false))}
+            <p className="text-[11px] text-[#9CA3AF]">
+              The pool&apos;s own view of your agent —{' '}
+              <span className="font-mono">reasonFor({shortenAddress(agent.address)})</span> ={' '}
+              <span className="font-semibold text-[#4B5568]">{poolReason ?? 'eligible'}</span>
+            </p>
           </div>
         ))}
 
-      {/* Step 7 + 8 — the money moment */}
-      {casaOk &&
+      {/* Step 7 + 8 — the money moment: one revoke, every surface refuses */}
+      {surfaceCleared &&
         step(6, 'The money moment — revoke the human', status === 'REVOKED', (
           <div className="space-y-3">
             <button
@@ -392,20 +495,11 @@ export default function HeroPage() {
               <>
                 <p className="text-xs text-[#4B5568]">
                   ENS <span className="font-mono">compliance.status</span> flipped to{' '}
-                  <span className="font-semibold text-red-600">{ensStatus}</span>. Now the agent retries…
+                  <span className="font-semibold text-red-600">{ensStatus}</span>, and the pool already
+                  says <span className="font-mono font-semibold text-red-600">{poolReason ?? '—'}</span>{' '}
+                  about your agent. Nothing was done to the agent itself. Now it retries — both surfaces.
                 </p>
-                <button
-                  onClick={() => doCasaTransfer(true)}
-                  disabled={busy === 'casa-retry'}
-                  className="text-sm font-semibold px-4 py-2.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40 w-full"
-                >
-                  {busy === 'casa-retry' ? 'Trying…' : 'Agent retries the transaction'}
-                </button>
-                {casaFail && (
-                  <p className="text-[11px] text-red-600 break-words border border-red-200 bg-red-50 rounded-lg px-3 py-2">
-                    ✗ Agent blocked: {casaFail}
-                  </p>
-                )}
+                {SURFACES.map((s) => surfaceRow(s, true))}
               </>
             )}
           </div>
