@@ -232,13 +232,40 @@ export default function HeroPage() {
             <span className="font-mono">{identity ? shortenAddress(identity) : '—'}</span>
           </p>
           {agent && (
-            <p className="text-[11px] text-[#8FA0C0] mt-1">
-              <span className="text-white font-semibold">{agent.ensName}</span> ·{' '}
-              <span className="font-mono">agent-registration</span> ={' '}
-              <span className="text-white">{agentEns?.registration ?? '—'}</span> ·{' '}
-              <span className="font-mono">reputation</span> ={' '}
-              <span className="text-white">{agentEns?.reputation ?? '—'}</span>
-            </p>
+            <div className="mt-4 rounded-xl border border-[#1E2D4D] bg-[#172040] p-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-sm font-bold text-white">{agent.ensName}</span>
+                {agentEns?.registration === '1' ? (
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#EAF7F0] text-[#0B7A4B] border border-[#B8E6CE]">
+                    ✓ ENSIP-25 verified agent
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-[#8FA0C0]">agent-registration —</span>
+                )}
+              </div>
+              <div className="flex items-center gap-5 mt-2">
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest text-[#8FA0C0]">Reputation</span>
+                  <p className="text-white font-bold text-lg leading-none mt-0.5">
+                    {agentEns?.reputation ?? '—'}
+                    <span className="text-[11px] font-normal text-[#8FA0C0]">/100</span>
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest text-[#8FA0C0]">
+                    agent-registration
+                  </span>
+                  <p className="text-white font-mono text-lg leading-none mt-0.5">
+                    {agentEns?.registration ?? '—'}
+                  </p>
+                </div>
+                <div className="text-[10px] text-[#8FA0C0] leading-tight">
+                  resolved live from
+                  <br />
+                  our ENS resolver (ENSIP-25)
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
