@@ -152,7 +152,19 @@ export class WorldIdService {
         expiresAt,
         nonce,
       });
-      return { mode: 'onchain' as const, verified: true, check, claim };
+      return {
+        mode: 'onchain' as const,
+        verified: true,
+        check,
+        // topic is a bigint — stringify it or the JSON response throws (same convention
+        // as IssuerController). Everything Identity.submitClaim(topic, issuer, sig, data) needs.
+        claim: {
+          topic: claim.topic.toString(),
+          issuer: claim.issuer,
+          signature: claim.signature,
+          data: claim.data,
+        },
+      };
     } catch (error) {
       if (!this.demo.enabled) throw error;
       this.demo.markCheckVerified(wallet, check);

@@ -191,7 +191,7 @@ describe('WorldIdService', () => {
 
     it('signs the check-specific claim topic when the issuer is configured', async () => {
       const signClaim = jest.fn(async () => ({
-        topic: '1', issuer: '0x1', signature: '0x2', data: '0x3',
+        topic: 123n, issuer: '0x1', signature: '0x2', data: '0x3',
       }));
       const { service } = makeService(signClaim as never);
       global.fetch = mockVerifier(200, { success: true, nullifier: '0xnull-1' });
@@ -199,6 +199,9 @@ describe('WorldIdService', () => {
       const result = await service.verifyAndPrepareClaim(WALLET, IDENTITY, 'selfie', idkitPayload('passportkit-selfie'));
 
       expect(result.mode).toBe('onchain');
+      // The bigint topic must come back as a string — raw bigints crash JSON serialization.
+      expect((result as { claim: { topic: string } }).claim.topic).toBe('123');
+      expect(() => JSON.stringify(result)).not.toThrow();
       const arg = (signClaim.mock.calls[0] as unknown[])[0] as { topic: bigint; expiresAt: bigint };
       const { CLAIM_TOPICS } = await import('../issuer/claim-topics');
       expect(arg.topic).toBe(CLAIM_TOPICS.SELFIE_VERIFIED);
