@@ -231,6 +231,12 @@ export default function PassportPage() {
           </div>
         )}
 
+        {/* World ID: personhood + selfie check (beta) + identity check (preview).
+            Deliberately outside the passport-state gate: the World ID row only needs
+            the eligibility/world-id endpoints, so a failing legacy passport read must
+            not take the QR flow down with it. */}
+        {walletAddress && !loading && <WorldIdChecksSection wallet={walletAddress} />}
+
         {walletAddress && passport && !loading && (
           <>
             {/* Progress stepper */}
@@ -242,9 +248,6 @@ export default function PassportPage() {
                 accreditedStatus={accreditedClaim?.status}
               />
             </div>
-
-            {/* World ID: personhood + selfie check (beta) + identity check (preview) */}
-            <WorldIdChecksSection wallet={walletAddress} />
 
             {/* Three-column layout: evidence | passport | wallet */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
