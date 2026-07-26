@@ -1,25 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton';
-import { PrivyLoginButton } from '@/components/wallet/PrivyLoginButton';
+import { useWallet, WalletConnectControl } from '@/components/shell/AppShell';
 import { DealRoomLocked } from '@/components/deal-room/DealRoomLocked';
 import { DealRoomLimited } from '@/components/deal-room/DealRoomLimited';
 import { DealRoomUnlocked } from '@/components/deal-room/DealRoomUnlocked';
 import { DealRoomBlocked } from '@/components/deal-room/DealRoomBlocked';
 import { getPassportState } from '@/modules/passport/passport.service';
 import type { PassportState } from '@/modules/passport/passport.types';
-import { PRODUCT_NAME } from '@/modules/passport/passport.constants';
-import { shortenAddress } from '@/lib/format';
-
-const HAS_PRIVY = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
 export default function DealRoomPage() {
-  const router = useRouter();
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [walletProvider, setWalletProvider] = useState<'privy' | 'metamask'>('privy');
+  // The wallet lives in the shell — arriving from /passport you are already connected.
+  const { address: walletAddress } = useWallet();
   const [passport, setPassport] = useState<PassportState | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -35,29 +27,15 @@ export default function DealRoomPage() {
     }
   }, []);
 
-  const handleWalletReady = useCallback(
-    async (address: string, provider: 'privy' | 'metamask' = 'privy') => {
-      setWalletAddress(address);
-      setWalletProvider(provider);
-      await fetchPassport(address);
-    },
-    [fetchPassport],
-  );
-
-  const handlePrivyWalletReady = useCallback(
-    (addr: string) => handleWalletReady(addr, 'privy'),
-    [handleWalletReady],
-  );
-  const handleMetaMaskWalletReady = useCallback(
-    (addr: string) => handleWalletReady(addr, 'metamask'),
-    [handleWalletReady],
-  );
-
-  function handleDisconnect() {
-    setWalletAddress(null);
-    setPassport(null);
-    router.push('/');
-  }
+  // Load on connect, clear on disconnect — the shell owns the address now.
+  useEffect(() => {
+    if (!walletAddress) {
+      setPassport(null);
+      setLoading(false);
+      return;
+    }
+    fetchPassport(walletAddress);
+  }, [walletAddress, fetchPassport]);
 
   useEffect(() => {
     if (walletAddress && passport?.claims.some((c) => c.status === 'PENDING' || c.status === 'PROCESSING')) {
@@ -76,11 +54,7 @@ export default function DealRoomPage() {
             Login with your email to access this Deal Room.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
-            {HAS_PRIVY ? (
-              <PrivyLoginButton onWalletReady={handlePrivyWalletReady} address={null} />
-            ) : (
-              <ConnectWalletButton onConnect={handleMetaMaskWalletReady} address={null} />
-            )}
+            <WalletConnectControl />
           </div>
         </div>
       );
@@ -114,35 +88,7 @@ export default function DealRoomPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0D1428]">
-      {/* Header */}
-      <header className="border-b border-[#1E2D4D]">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4A9EFF] to-[#3DDBD9] flex items-center justify-center">
-              <span className="text-white text-xs font-bold">PC</span>
-            </div>
-            <span className="font-bold text-white text-sm">{PRODUCT_NAME}</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            {walletAddress && (
-              <span className="text-xs font-mono text-[#8FA0C0]">{shortenAddress(walletAddress)}</span>
-            )}
-            {!walletAddress && (
-              HAS_PRIVY
-                ? <PrivyLoginButton onWalletReady={handlePrivyWalletReady} address={null} />
-                : <ConnectWalletButton onConnect={handleMetaMaskWalletReady} address={null} />
-            )}
-            <Link
-              href="/passport"
-              className="text-sm font-semibold text-[#4A9EFF] hover:text-[#2B7FE0] transition-colors"
-            >
-              ← Passport
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <div className="flex-1 bg-[#0D1428]">
       {/* Passport status bar */}
       {passport && walletAddress && (
         <div className="border-b border-[#1E2D4D] bg-[#141E38]">

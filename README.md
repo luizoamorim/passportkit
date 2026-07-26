@@ -241,24 +241,68 @@ CRE workflow per verification:
 | `ClaimRegistry.sol` | AccessControl | Stores verified claims per wallet. Only CRE can write. |
 | `CompliancePassport.sol` | ERC-721 + ERC-5192 | Soulbound passport. Minted on first claim. Status derived from ClaimRegistry. |
 | `AccessGate.sol` | Read-only | Reads ClaimRegistry + CompliancePassport. Answers `canAccessDealRoom`, `canAccessInvestorArea`. |
+| `hooks/ComplianceHook.sol` | Uniswap v4 hook | Gates swaps + liquidity adds on AccessGate. Exit is never gated. |
+| `agents/HouseToken.sol` | ERC-20 | House scrip (CASA). Minted only by its treasury; `reclaim` claws it back. The agent's balance *is* its budget. |
+| `agents/HouseTreasury.sol` | Governance | Owners, m-of-n approvals, agent mandate (`perTxCap`, `expiresAt`), payment queue. `isAgentInGoodStanding` is the one view every agent surface gates on. |
+| `hooks/MandateHook.sol` | Uniswap v4 hook | Gates the CASA/mUSD pool: compliant owners, or a mandated agent within its per-tx cap. Exit is never gated. |
 
 Claims: `KYC_AML_VERIFIED` · `ACCREDITED_INVESTOR`
 
 Passport status: `NONE → IN_PROGRESS → LIMITED → GREEN` (or `RED` on KYC failure, `REVOKED` by admin)
 
+### Uniswap v4 ComplianceHook
+
+The same AccessGate that guards the Deal Room can guard a Uniswap v4 pool: the
+ComplianceHook checks the swapper (and liquidity provider) in `beforeSwap` /
+`beforeAddLiquidity` and reverts `NotCompliant(wallet, reasonCode)` for anyone the
+gate refuses — removing liquidity is deliberately ungated so funds are never trapped.
+Two demo pools show policy separation: a Deal Room pool (LIMITED or GREEN) and an
+Investor pool (GREEN only).
+
+- Local demo: `make demo` → http://localhost:3003/markets
+- Tests: `cd contracts && forge test --match-contract ComplianceHookTest`
+- Spec & design notes: [`docs/specs/uniswap-hook-spec.md`](docs/specs/uniswap-hook-spec.md)
+
+### House Concierge Agent
+
+**Agents don't KYC.** So the concierge doesn't pretend to: its authority is a mandate
+granted by the house's owners, and it only holds while those owners' passports stay
+live. Every enforcement point — the MandateHook on the CASA/mUSD pool and the
+HouseTreasury approval queue — re-reads the owners' `AccessGate` status in the same
+block, so revoking one owner's KYC instantly strips the AI of both its market access
+and its treasury (`OWNER_NOT_COMPLIANT`). Routine tickets are paid autonomously
+(swap CASA→mUSD through the gated pool, then settle the vendor's x402 invoice);
+anything above the per-tx cap is queued for m-of-n owner approval with the agent's
+decision hash anchored on-chain.
+
+- Local demo: `make demo` → http://localhost:3003/concierge
+- Tests: `cd contracts && forge test --match-path 'test/agents/*'` (29) and `npm test --workspace=apps/web` (39)
+- Spec & design notes: [`docs/specs/agent-concierge-spec.md`](docs/specs/agent-concierge-spec.md)
+
 ---
 
 ## Repo Structure
 
+One site, one command. Everything a visitor touches is `apps/web`:
+
 ```
 apps/
+  web/       — Next.js 14 App Router — THE demo site (TailwindCSS + Privy)
+      src/app/{passport,deal-room,markets,concierge}/   the four routes
+      src/app/api/demo/**                              the demo runtime (local anvil only)
+      src/lib/demo/                                    deciders · evidence · x402 · decode · positions
+      test/demo/                                       node:test for those libs
   api/       — NestJS backend (Prisma + PostgreSQL)
-  web/       — Next.js 14 frontend (TailwindCSS + Privy)
 contracts/   — Foundry smart contracts (Solidity)
+      script/DeployAll.s.sol                           the one demo world
 cre/         — Chainlink CRE workflow (TypeScript + viem)
 demo/        — Synthetic compliance documents + AI prompts
-docs/        — Architecture, AI usage, judges notes
+docs/        — Architecture, specs, AI usage, judges notes
 ```
+
+The Uniswap hook demo and the concierge demo used to be two extra node servers on two
+extra ports. They are now the `/markets` and `/concierge` routes on the site above —
+same wallet, same chain, same design.
 
 ---
 
@@ -300,13 +344,74 @@ The sample documents available for download in the app (`public/samples/`) are i
 
 ## Quick Start (local)
 
-```bash
-# Start everything
-make up
+Two commands, and the whole demo is up:
 
-# Run E2E demo
-make test-green
+```bash
+npm install
+make demo
 ```
+
+`make demo` starts anvil (or reuses one already listening), deploys the one demo world,
+and serves the site on **http://localhost:3003** with `DEMO_MODE=true`. Start at
+[`/`](http://localhost:3003/) — it is one story in four steps, and one wallet and one
+chain all the way through:
+
+| Route | What it shows |
+|---|---|
+| [`/passport`](http://localhost:3003/passport) | Get verified — AI attester → Chainlink CRE → onchain claim → soulbound passport |
+| [`/deal-room`](http://localhost:3003/deal-room) | The gated app asks the EligibilityGate, never for a document |
+| [`/markets`](http://localhost:3003/markets) | Two Uniswap v4 pools on that same gate, with the refusal reason codes |
+| [`/concierge`](http://localhost:3003/concierge) | An agent spending a mandate borrowed from compliant owners |
+
+Then revoke a claim on `/markets` and watch all four change their answer.
+
+```bash
+make demo RPC_PORT=8546 WEB_PORT=3010   # run a second world beside an existing one
+make demo-stop                          # stop the site, and the chain only if make demo started it
+make up                                 # the full product stack: db + api + cre + web on :3000
+```
+
+`make demo` reuses an anvil that is already listening rather than restarting it, and
+`make demo-stop` then leaves that chain running — it only kills a node it started itself.
+`make up` is the exception: it *replaces* the chain on :8545, which is `make demo`'s default
+port too, so give the demo its own `RPC_PORT` if you want both at once.
+
+`make demo` is now the only demo command — the two standalone demo servers, and the
+targets that started them, are gone. Want a block explorer over the demo chain?
+`make demo-explorer` runs Otterscan on http://localhost:5100.
+
+### One demo world
+
+Every onchain demo — both gated Uniswap v4 pools and the House Concierge — lives in a
+single chain world: one PassportKit stack, one v4 PoolManager, three pools. `make demo`
+deploys it with one script; by hand that is:
+
+```bash
+anvil --silent &
+cd contracts && forge script script/DeployAll.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+```
+
+It writes every address to `apps/web/demo-addresses.json`, the single file the site reads.
+
+Starting state: **operator** (KYC + accredited, admin, issuer signer, LP), **ana** (KYC,
+house co-owner), **rui** (identity, no claims — verified live in the demo), **concierge**
+and **plumber** (no identity at all). The house holds 50,000 mUSD and has granted the
+concierge a mandate of 200 CASA per transaction, funded with 500 CASA.
+
+### Configuration
+
+`make demo` needs no configuration — the actor keys default to the well-known anvil dev
+accounts. `apps/web/env.example` documents every variable the site reads (`DEMO_MODE`,
+`RPC_URL`, `EXPLORER_URL`, the five actor keys, `NEXT_PUBLIC_PRIVY_APP_ID`); copy it to
+`apps/web/.env.local` only to change one. **`DEMO_MODE=true` lets anyone who can reach
+the server sign with those keys — it belongs on a laptop, never on a deployment.** With
+it unset, `/passport` and `/deal-room` work as normal and `/markets` and `/concierge`
+say the runtime is off.
+
+There are two templates in `apps/web` and they are not interchangeable: **`env.example`
+is the local demo one** (`DEMO_MODE`, `RPC_URL`, the actor keys — the file you want for
+`make demo`), while **`.env.example` is the hosted Sepolia one** for a deployment of the
+product pages, and it does not turn the demo runtime on.
 
 ---
 
