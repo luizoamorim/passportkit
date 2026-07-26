@@ -70,6 +70,30 @@ export default function HeroPage() {
     refreshStatus();
   }, [refreshStatus]);
 
+  // Read the agent's live ENSIP-25 record + reputation, and keep retrying: the read RPC lags the write
+  // RPC after link-agent, so a single read right after creation often comes back empty.
+  useEffect(() => {
+    if (!agent) return;
+    let cancelled = false;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      const e = await readAgentEns(agent.ensName, agent.address).catch(() => null);
+      if (cancelled) return;
+      if (e) setAgentEns(e);
+      tries += 1;
+      // keep polling until registration resolves to "1" (or give up after ~10 tries)
+      if ((!e || e.registration !== '1') && tries < 10) {
+        timer = setTimeout(tick, 3000);
+      }
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [agent]);
+
   // Restore per-wallet state on connect (ENS name isn't reverse-resolvable, so we cache it) + read
   // the on-chain identity as a fallback.
   useEffect(() => {
@@ -149,8 +173,7 @@ export default function HeroPage() {
       setAgent(ag);
       addTx('linkAgent', r.txs.linkAgent);
       addTx('agent ENS + score', r.txs.bindEns);
-      const e = await readAgentEns(ag.ensName, ag.address).catch(() => null);
-      setAgentEns(e);
+      // The read RPC lags the write RPC — the polling effect below re-reads until it resolves.
     });
 
   const doCasaTransfer = (retry: boolean) =>
