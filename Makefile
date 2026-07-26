@@ -1,7 +1,8 @@
 .PHONY: help up up-testnet down api cre web db migrate ngrok logs \
         test-kyc test-green test-red status stop reset-db \
         build-cre env-check deploy-testnet deploy-local anvil \
-        demo demo-chain demo-deploy demo-web demo-stop demo-explorer
+        demo demo-chain demo-deploy demo-web demo-stop demo-explorer \
+        hero hero-stop
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,10 @@ help:
 	@echo "                         (override with RPC_PORT=… WEB_PORT=…)"
 	@echo "    make demo-stop     — stop that site, and its anvil if make demo started it"
 	@echo "    make demo-explorer — Otterscan on :5100 against the demo chain"
+	@echo ""
+	@echo "  The hero flow (real Sepolia)"
+	@echo "    make hero          — DB-free API on :3001 + web on :3000 → /hero"
+	@echo "    make hero-stop     — stop both"
 	@echo ""
 	@echo "  Setup"
 	@echo "    make env-check     — verify .env files exist"
@@ -143,6 +148,30 @@ web:
 	@cd apps/web && npm run dev > $(WEB_LOG) 2>&1 &
 	@sleep 5
 	@curl -sf http://localhost:3000 > /dev/null && echo "✓ Frontend up" || echo "✗ Frontend not yet ready — check $(WEB_LOG)"
+
+# ─── The hero flow (real Sepolia, DB-free) ─────────────────────────────────────
+# The guided /hero journey: World ID + identity + live ENS + agent + money moment.
+# No Postgres/anvil — a DB-free API (hero-main.ts) + the web app, both against
+# Sepolia (reads apps/api/.env: CHAIN_ID=11155111, DEMO_MODE=true, World + agent keys).
+HERO_API_LOG := /tmp/passport-hero-api.log
+HERO_WEB_LOG := /tmp/passport-hero-web.log
+
+hero:
+	@echo "→ Hero flow (Sepolia): DB-free API on :3001 + web on :3000"
+	@lsof -ti:3001 | xargs kill -9 2>/dev/null || true
+	@lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+	@cd apps/api && npx ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/hero-main.ts > $(HERO_API_LOG) 2>&1 &
+	@cd apps/web && npm run dev > $(HERO_WEB_LOG) 2>&1 &
+	@sleep 10
+	@curl -sf -X POST http://localhost:3001/world/request -H "Content-Type: application/json" -d '{"kind":"document"}' > /dev/null \
+		&& echo "✓ Hero API up (:3001)" || echo "✗ API — check $(HERO_API_LOG)"
+	@curl -sf http://localhost:3000/hero > /dev/null \
+		&& echo "✓ Hero web up → http://localhost:3000/hero" || echo "✗ web — check $(HERO_WEB_LOG)"
+
+hero-stop:
+	@lsof -ti:3001 | xargs kill -9 2>/dev/null || true
+	@lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+	@echo "✓ Hero stopped"
 
 ngrok:
 	@echo "→ Starting ngrok tunnel for :3001"
